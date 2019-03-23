@@ -28,7 +28,7 @@ def image_combine(img_list, method='median', masks=None,
                              signma_clip_dev_func=mad_std)
 
     if isinstance(output_fname, str) or isinstance(output_fname, unicode):
-        logging.info('>>> {0} file is created.')
+        logging.info('>>> {0} file is created.'.format(output_fname))
         return True
     elif output_fname is None:
         return combined_image
