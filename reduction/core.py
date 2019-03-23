@@ -3,6 +3,7 @@
 __all__ = ['FitsCollection', 'image_combine', 'bias_combine',
            'dark_combine', 'flat_combine']
 
+import logging
 from .helper import FitsCollection
 from ccdproc import CCDData
 from astropy.stats import mad_std
@@ -17,21 +18,20 @@ def image_combine(img_list, method='median', masks=None,
                   output_fname='master_image.fits',
                   gain=None, read_noise=None, **kwargs):
 
-    combined_images = combine(img_list,
-                              output_file=output_fname,
-                              method=method,
-                              sigma_clip=True,
-                              sigma_clip_low_thresh=5,
-                              sigma_clip_high_thresh=5,
-                              sigma_clip_func=np.ma.median,
-                              signma_clip_dev_func=mad_std)
+    combined_image = combine(img_list,
+                             output_file=output_fname,
+                             method=method,
+                             sigma_clip=True,
+                             sigma_clip_low_thresh=5,
+                             sigma_clip_high_thresh=5,
+                             sigma_clip_func=np.ma.median,
+                             signma_clip_dev_func=mad_std)
 
     if isinstance(output_fname, str) or isinstance(output_fname, unicode):
+        logging.info('>>> {0} file is created.')
         return True
     elif output_fname is None:
-        return combined_images
-
-    pass
+        return combined_image
 
 
 def bias_combine():
