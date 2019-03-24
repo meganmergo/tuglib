@@ -1,7 +1,7 @@
-# tuglib
-Yet another astronomical library 
+# ***tuglib***
+Yet another **Astronomical Reduction and Analysis Tool**.
 
-##FitsCollection
+## FitsCollection
 
 ```python
 from tuglib.reduction import FitsCollection
