@@ -2,12 +2,11 @@
 
 __all__ = ['FitsCollection']
 
+import numpy as np
+
 from os import path
 from glob import glob
 
-import numpy as np
-
-from astropy import units as u
 from astropy.table import Table
 from astropy.io import fits
 
@@ -47,7 +46,7 @@ def get_fits_header(filename):
         elif isinstance(x, float):
             dtypes.append('float')
         else:
-            dtypes.append('U32')
+            dtypes.append('U64')
 
     return keywords, values, comments, dtypes
 
@@ -73,10 +72,23 @@ class FitsCollection(object):
     (A ccdproc.ImageFileCollection alternative)
 
     It performs recursive fits image search in given directory.
+
+    Parameters
+    ----------
+    location : str
+        Full path directory that include images.
+        Example: '/home/user/data/20190325'
+
+    file_extension : None, str, tuple or list
+        Image extensions. Should be one of 'fit', 'fits', 'fit.gz',
+        'fits.gz', 'fit.zip', 'fits.zip'
+
+    Returns
+    -------
+
     """
 
-    def __init__(self, location, file_extension=None,
-                 start_init=True, **kwargs):
+    def __init__(self, location, file_extension='fits'):
 
         if not isinstance(location, str):
             raise TypeError(
@@ -92,19 +104,13 @@ class FitsCollection(object):
                 "'file_extension' should be "
                 "'fit, fits, fit.gz, fits.gz, fit.zip, fits.zip' type.")
 
-        if not isinstance(start_init, bool):
-            raise TypeError("'start_init' should be a 'bool' object.")
-
         self.location = location
         self._file_extension = file_extension
         self.filenames = list()
-        self._start_init = start_init
 
         self.collection = None
 
-        if location is not None:
-            if self._start_init:
-                self.init()
+        self.init()
 
     def init(self):
         directory = list()
@@ -121,18 +127,44 @@ class FitsCollection(object):
 
         self.filenames = sorted(glob(directory, recursive=True))
 
-        r = get_fits_header(self.filenames[0])
-        names, dtypes = r[0], r[3]
+        db = dict()
+        for filename in self.filenames:
+            h = get_fits_header(filename)
+            db[filename] = h
+
+        cs = dict()
+        for filename in self.filenames:
+            for i, key in enumerate(db[filename][0]):
+                cs[db[filename][0][i]] = db[filename][3][i]
+
+        names = list(cs.keys())
         names = ['filename'] + names
+        dtypes = list(cs.values())
         dtypes = ['U64'] + dtypes
 
         self.collection = Table(names=names, dtype=dtypes)
 
         for filename in self.filenames:
-            r = get_fits_header(filename)
-            values = [filename] + r[1]
+            self.collection.add_row()
+            row_index = len(self.collection) - 1
+            self.collection['filename'][row_index] = filename
 
-            self.collection.add_row(values)  # values
+            h = db[filename]
+            for i, key in enumerate(h[0]):
+                if isinstance(h[1][i], str):
+                    h[1][i] = h[1][i].strip()
+                self.collection[key][row_index] = h[1][i]
+
+    def __getitem__(self, key):
+        return self.collection[key]
+
+    def __call__(self, collection):
+        ccds = list()
+        for filename in collection['filename']:
+            ccd = CCDData.read(filename, unit='adu')
+            ccds.append(ccd)
+
+        return ccds
 
     def __str__(self):
         pass
