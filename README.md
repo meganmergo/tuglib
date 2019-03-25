@@ -10,7 +10,7 @@ from tuglib.reduction import FitsCollection
 # Get all fits file on given directory.
 images = FitsCollection(location='/Users/oguzhan/tmp/20180901N/')
 
-# Select filename and exptime from collection
+# Select 'filename' and 'exptime' columns from collection
 # where object keyword equal 'BIAS'.
 biases = images[images['OBJECT'] == 'BIAS']['filename', 'EXPTIME']
 print(biases)
