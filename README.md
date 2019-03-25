@@ -4,6 +4,7 @@ Yet another **Astronomical Reduction and Analysis Tool**.
 ## FitsCollection
 
 ```python
+import numpy as np
 from tuglib.reduction import FitsCollection
 
 
