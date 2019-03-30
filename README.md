@@ -4,52 +4,34 @@ Yet another **Astronomical Reduction and Analysis Tool**.
 ## FitsCollection
 
 ```python
-import numpy as np
 from tuglib.reduction import FitsCollection
 
 
-# Get all fits file on given directory.
-images = FitsCollection(location='/Users/oguzhan/tmp/20180901N/')
+# Get all fits file from directory.
+images = FitsCollection(
+    location='/Users/oguzhan/tmp/20180901N/', gain=0.57, read_noise=4.11)
 
+# Get 'ccd' objects from collection where 'object' keyword equal 'BIAS'.
+biases = images.ccds(OBJECT='BIAS')
+
+# Filtered search example.
 # Select 'filename' and 'exptime' columns from collection
-# where object keyword equal 'BIAS'.
-biases = images[images['OBJECT'] == 'BIAS']['filename', 'EXPTIME']
-print(biases)
+# where 'object' keyword equals 'FLAT' and
+# 'filter' keyword equals 'W1:03 V W2:00 Empty' and
+# 'exptime' keyword less than 0.06 seconds.
+f1 = images['OBJECT'] == 'FLAT'
+f2 = images['FILTER'] == 'W1:03 V W2:00 Empty'
+f3 = images['EXPTIME'] < 0.06
+
+filtered_flats = images[f1 & f2 & f3]['filename', 'EXPTIME']
+print(filtered_flats)
 ```
 
 ```
-                    filename                     EXPTIME
------------------------------------------------- -------
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0001.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0002.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0003.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0004.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0005.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0006.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0007.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0008.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0009.fits     0.0
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0010.fits     0.0
+                     filename                     EXPTIME
+                      str64                       float64
+------------------------------------------------- -------
+/Users/oguzhan/tmp/20180901N/BDF/FLAT_0018_V.fits    0.05
+/Users/oguzhan/tmp/20180901N/BDF/FLAT_0019_V.fits    0.05
 ```
 
-```python
-# Get ccds object from collection.
-ccds = images(biases)
-
-for i, ccd in enumerate(ccds):
-    print(biases['filename'][i], '%.3f' % np.average(ccd.data))
-
-```
-
-```
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0001.fits 496.991
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0002.fits 496.999
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0003.fits 497.006
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0004.fits 496.996
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0005.fits 497.001
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0006.fits 497.004
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0007.fits 497.000
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0008.fits 496.994
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0009.fits 496.987
-/Users/oguzhan/tmp/20180901N/BDF/Bias__0010.fits 496.980
-```

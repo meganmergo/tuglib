@@ -3,6 +3,8 @@
 __all__ = ['FitsCollection', 'make_mask', 'image_combine', 'bias_combine',
            'dark_combine', 'flat_combine']
 
+import numpy as np
+
 from .helper import FitsCollection
 from ccdproc import CCDData
 
@@ -38,14 +40,13 @@ def make_mask(shape, area):
 
 # Generic image combine function.
 # This will be bases for all bias/dark/flat combine methods
-def image_combine(images, method='median', masks=None,
-                  trim=None, return_ccddata=True,
-                  output='master_image.fits',
-                  gain=None, read_noise=None, **kwargs):
+def image_combine(images, method='median', output='master_image.fits',
+                  masks=None, trim=None, gain=None, read_noise=None,
+                  return_ccddata=True):
 
-    if not isinstance(images, FitsCollection):
+    if not isinstance(images, (tuple, list, FitsCollection)):
         raise TypeError(
-            "'images' should be a 'FitsCollection' object.")
+            "'images' should be 'tuple', 'list' or 'FitsCollection' object.")
 
     if method not in ('average', 'median', 'sum'):
         raise ValueError(
@@ -74,7 +75,7 @@ def image_combine(images, method='median', masks=None,
             "'read_noise' should be a 'float' object.")
 
     if masks is not None:
-        shape = next(images.hdus(**kwargs)).shape
+        shape = next(images.hdus()).shape
         mask = make_mask(shape, masks[0])
         for m in masks[1:]:
             tmp_mask = make_mask(shape, m)
