@@ -73,7 +73,7 @@ class FitsCollectionTest(ImageFileCollection):
 
 class FitsCollection(object):
     """FITS Image Collection
-    (A ccdproc.ImageFileCollection alternative. It was re written from scratch)
+    (A ccdproc.ImageFileCollection alternative. It was re written from scratch.)
 
     It performs recursive fits image search in given directory.
 
