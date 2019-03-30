@@ -35,3 +35,7 @@ print(filtered_flats)
 /Users/oguzhan/tmp/20180901N/BDF/FLAT_0019_V.fits    0.05
 ```
 
+```python
+# Get 'ccd' objects from 'filtered_flats' collection.
+flats = images(filtered_flats)
+```
