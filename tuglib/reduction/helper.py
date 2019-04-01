@@ -15,12 +15,14 @@ from ccdproc import ImageFileCollection, CCDData,\
     create_deviation, gain_correct
 
 
+# Available file extensions. New extensions can be added in the future.
 FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip')
 
 
 # Another helper method for FitsCollection class.
 def get_fits_header(filename):
-    """Transposes fits header column by column.
+    """
+    Converts 'Header' to list of 'keywords', 'values', 'comments' and 'dtypes'.
 
     Parameters
     ----------
@@ -53,26 +55,9 @@ def get_fits_header(filename):
     return keywords, values, comments, dtypes
 
 
-# It doesn't work well!
-# Helper class for ccdproc.ImageFileCollection
-class FitsCollectionTest(ImageFileCollection):
-
-    def __init__(self, **kwargs):
-        if 'location' in kwargs:
-            directory = path.join(kwargs['location'], '**', '*.*')
-
-            images = glob(directory, recursive=True)
-            # kwargs['filenames'] = images
-            kwargs['filenames'] = \
-                [image.split(kwargs['location'])[1]
-                 for image in images]
-            print(kwargs['filenames'])
-
-        super(FitsCollectionTest, self).__init__(**kwargs)
-
-
 class FitsCollection(object):
-    """FITS Image Collection
+    """
+    FITS Image Collection
     (A ccdproc.ImageFileCollection alternative. It was re written from scratch.)
 
     It performs recursive fits image search in given directory.
@@ -95,6 +80,20 @@ class FitsCollection(object):
 
     unit : astropy.units
         'Unit' value. Default type is 'astropy.units.adu'.
+
+    Methods
+    -------
+    ccds(**kwargs)
+        Return 'Data' objects from collection. If any positional
+        arguments like 'fits' header keywords, it filters result.
+
+    datas(**kwargs)
+        Return 'np.array' (fits.data) objects from collection. If any positional
+        arguments like 'fits' header keywords, it filters result.
+
+    headers(**kwargs)
+        Return 'fits.header' objects from collection. If any positional
+        arguments like 'fits' header keywords, it filters result.
 
     Examples
     --------
@@ -190,6 +189,9 @@ class FitsCollection(object):
         return self._collection
 
     def _prepare(self):
+        """
+        Only for internal use.
+        """
         directory = list()
 
         if self._file_extension is None:
@@ -235,7 +237,8 @@ class FitsCollection(object):
         self._keywords = self._collection.colnames
 
     def ccds(self, **kwargs):
-        """Get 'CCDData' objects from collection.
+        """
+        Get 'CCDData' objects from collection.
 
         Parameters
         ----------
@@ -280,7 +283,8 @@ class FitsCollection(object):
         return records
 
     def datas(self, **kwargs):
-        """Get 'numpy.ndarray' objects from collection.
+        """
+        Get 'numpy.ndarray' objects from collection.
 
         Parameters
         ----------
@@ -312,7 +316,8 @@ class FitsCollection(object):
         return records
 
     def headers(self, **kwargs):
-        """Get 'astropy.io.fits.header.Header' objects from collection.
+        """
+        Get 'astropy.io.fits.header.Header' objects from collection.
 
         Parameters
         ----------
@@ -372,3 +377,21 @@ class FitsCollection(object):
             return ccds
 
         return self.ccds(**kwargs)
+
+
+# It doesn't work well. Just for proof of concept.
+# Helper class for ccdproc.ImageFileCollection
+class FitsCollectionTest(ImageFileCollection):
+
+    def __init__(self, **kwargs):
+        if 'location' in kwargs:
+            directory = path.join(kwargs['location'], '**', '*.*')
+
+            images = glob(directory, recursive=True)
+            # kwargs['filenames'] = images
+            kwargs['filenames'] = \
+                [image.split(kwargs['location'])[1]
+                 for image in images]
+            print(kwargs['filenames'])
+
+        super(FitsCollectionTest, self).__init__(**kwargs)
