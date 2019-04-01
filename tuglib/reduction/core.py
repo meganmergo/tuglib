@@ -5,48 +5,19 @@ __all__ = ['FitsCollection', 'make_mask', 'image_combine', 'bias_combine',
 
 import numpy as np
 
-from .helper import FitsCollection
-from ccdproc import CCDData
-
-
-def make_mask(shape, area):
-    """Make a mask specific to the given area.
-
-    Parameters
-    ----------
-
-    shape : tuple
-        Size of mask (m, n)
-
-    area : str
-        The area to be masked.
-
-    Returns
-    -------
-    m : np.array
-        Masked area.
-
-    Examples
-    --------
-
-    >>> m = make_mask((1024, 1024), '[100:200, 23:55]')
-    """
-
-    m = np.full(shape, False, dtype=bool)
-    exec('m' + area + ' = True')
-
-    return m
+from .helper import FitsCollection, make_mask
+from ccdproc import CCDData, trim_image, combine
 
 
 # Generic image combine function.
 # This will be bases for all bias/dark/flat combine methods
 def image_combine(images, method='median', output='master_image.fits',
                   masks=None, trim=None, gain=None, read_noise=None,
-                  return_ccddata=True):
+                  return_ccddata=True, **kwargs):
 
-    if not isinstance(images, (tuple, list, FitsCollection)):
+    if not isinstance(images, FitsCollection):
         raise TypeError(
-            "'images' should be 'tuple', 'list' or 'FitsCollection' object.")
+            "'images' should be a 'FitsCollection' object.")
 
     if method not in ('average', 'median', 'sum'):
         raise ValueError(
@@ -74,8 +45,10 @@ def image_combine(images, method='median', output='master_image.fits',
         raise TypeError(
             "'read_noise' should be a 'float' object.")
 
+    ccds = images.ccds(**kwargs)
+
     if masks is not None:
-        shape = next(images.hdus()).shape
+        shape = ccds[0].data.shape
         mask = make_mask(shape, masks[0])
         for m in masks[1:]:
             tmp_mask = make_mask(shape, m)
@@ -83,7 +56,13 @@ def image_combine(images, method='median', output='master_image.fits',
     else:
         mask = None
 
-    master_list = list()
+    tmp_ccds = list()
+    if trim is not None:
+        for ccd in ccds:
+            ccd = trim_image(ccd, trim)
+            tmp_ccds.append(ccd)
+
+
 
 
 

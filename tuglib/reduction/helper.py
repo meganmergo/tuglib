@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__all__ = ['FitsCollection']
+__all__ = ['FitsCollection', 'make_mask']
 
 from os import path
 from glob import glob
@@ -11,8 +11,8 @@ from astropy.table import Table
 from astropy.io import fits
 import astropy.units as u
 
-from ccdproc import ImageFileCollection, CCDData,\
-    create_deviation, gain_correct
+from ccdproc import ImageFileCollection, CCDData, create_deviation,\
+    gain_correct, trim_image
 
 
 # Available file extensions. New extensions can be added in the future.
@@ -53,6 +53,36 @@ def get_fits_header(filename):
             dtypes.append('U64')
 
     return keywords, values, comments, dtypes
+
+
+def make_mask(shape, area):
+    """
+    Make a mask specific to the given area.
+
+    Parameters
+    ----------
+
+    shape : tuple
+        Size of mask (m, n)
+
+    area : str
+        The area to be masked.
+
+    Returns
+    -------
+    m : np.array
+        Masked area.
+
+    Examples
+    --------
+
+    >>> m = make_mask((1024, 1024), '[100:200, 23:55]')
+    """
+
+    m = np.full(shape, False, dtype=bool)
+    exec('m' + area + ' = True')
+
+    return m
 
 
 class FitsCollection(object):
@@ -124,7 +154,7 @@ class FitsCollection(object):
     /Users/oguzhan/tmp/20180901N/BDF/FLAT_0019_V.fits    0.05
     """
 
-    def __init__(self, location, file_extension='fits',
+    def __init__(self, location, file_extension='fits', masks=None,
                  gain=None, read_noise=None, unit=u.adu):
 
         if not isinstance(location, str):
@@ -141,8 +171,18 @@ class FitsCollection(object):
                 "'file_extension' should be "
                 "'fit, fits, fit.gz, fits.gz, fit.zip, fits.zip' type.")
 
+        if not isinstance(gain, (type(None), float)):
+            raise TypeError(
+                "'gain' should be 'None' or 'float' object.")
+
+        if not isinstance(read_noise, (type(None), float)):
+            raise TypeError(
+                "'read_noise' should be 'None' or 'float' object.")
+
         self._location = location
         self._file_extension = file_extension
+
+        self._masks = masks
 
         self._gain = gain
         if gain is not None:
@@ -236,14 +276,20 @@ class FitsCollection(object):
 
         self._keywords = self._collection.colnames
 
-    def ccds(self, **kwargs):
+    def ccds(self, masks=None, trim=None, **kwargs):
         """
         Get 'CCDData' objects from collection.
 
         Parameters
         ----------
+        masks : list, optional
+            A list of string formated image mask section.
+
+        trim : str, optional
+            Trim section.
+
         **kwargs :
-            Any additional keywords are used to filter the items returned
+            Any additional keywords are used to filter the items returned.
 
         Returns
         -------
@@ -255,6 +301,15 @@ class FitsCollection(object):
         >>> images = FitsCollection(location='/home/user/data/fits/')
         >>> biases = images.ccds(OBJECT='BIAS')
         """
+
+        if masks is not None:
+            if not isinstance(masks, list):
+                raise TypeError("'masks' should be a 'list' object.")
+
+        if trim is not None:
+            if not isinstance(trim, str):
+                raise TypeError("'trim' should be a 'str' object.")
+
         records = list()
 
         tmp = np.full(len(self._collection), True, dtype=bool)
@@ -263,9 +318,24 @@ class FitsCollection(object):
             for key, val in kwargs.items():
                 tmp = tmp & (self._collection[key] == val)
 
+        x = self._collection[tmp]['NAXIS1'][0]
+        y = self._collection[tmp]['NAXIS2'][0]
+        shape = (y, x)
+
+        mask = None
+        if masks is not None:
+            mask = make_mask(shape, masks[0])
+            for m in masks[1:]:
+                tmp_mask = make_mask(shape, m)
+                mask |= tmp_mask
+
         if (self._gain is not None) and (self._read_noise is not None):
             for filename in self._collection[tmp]['filename']:
                 ccd = CCDData.read(filename, unit=self._unit)
+
+                # if mask is not None:
+                ccd.mask = mask
+                ccd = trim_image(ccd, trim)
 
                 data_with_deviation = create_deviation(
                     ccd, gain=self._gain, readnoise=self._read_noise)
