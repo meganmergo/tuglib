@@ -114,7 +114,7 @@ class FitsCollection(object):
     Methods
     -------
     ccds(**kwargs)
-        Return 'Data' objects from collection. If any positional
+        Return 'ccdproc.CCDData' objects from collection. If any positional
         arguments like 'fits' header keywords, it filters result.
 
     datas(**kwargs)
@@ -282,10 +282,10 @@ class FitsCollection(object):
 
         Parameters
         ----------
-        masks : list, optional
-            A list of string formated image mask section.
+        masks : str, list of str or optional
+            Area to be masked.
 
-        trim : str, optional
+        trim : str or optional
             Trim section.
 
         **kwargs :
@@ -298,13 +298,17 @@ class FitsCollection(object):
         Examples
         --------
 
-        >>> images = FitsCollection(location='/home/user/data/fits/')
-        >>> biases = images.ccds(OBJECT='BIAS')
+        >>> mask = '[:, 1000:1046]'
+        >>> trim = '[100:1988, :]'
+        >>> images = FitsCollection(
+                location='/home/user/data/fits/', gain=0.57, read_noise=4.11)
+        >>> biases = images.ccds(OBJECT='BIAS', masks=mask, trim=trim)
         """
 
         if masks is not None:
-            if not isinstance(masks, list):
-                raise TypeError("'masks' should be a 'list' object.")
+            if not isinstance(masks, (str, list, type(None))):
+                raise TypeError(
+                    "'masks' should be 'str', 'list' or 'None' object.")
 
         if trim is not None:
             if not isinstance(trim, str):
@@ -324,16 +328,18 @@ class FitsCollection(object):
 
         mask = None
         if masks is not None:
-            mask = make_mask(shape, masks[0])
-            for m in masks[1:]:
-                tmp_mask = make_mask(shape, m)
-                mask |= tmp_mask
+            if isinstance(masks, list):
+                mask = make_mask(shape, masks[0])
+                for m in masks[1:]:
+                    tmp_mask = make_mask(shape, m)
+                    mask |= tmp_mask
+            else:
+                mask = make_mask(shape, masks)
 
         if (self._gain is not None) and (self._read_noise is not None):
             for filename in self._collection[tmp]['filename']:
                 ccd = CCDData.read(filename, unit=self._unit)
 
-                # if mask is not None:
                 ccd.mask = mask
                 ccd = trim_image(ccd, trim)
 
@@ -348,13 +354,17 @@ class FitsCollection(object):
 
         for filename in self._collection[tmp]['filename']:
             ccd = CCDData.read(filename, unit=self._unit)
+
+            ccd.mask = mask
+            ccd = trim_image(ccd, trim)
+
             records.append(ccd)
 
         return records
 
     def datas(self, **kwargs):
         """
-        Get 'numpy.ndarray' objects from collection.
+        Get raw 'numpy.ndarray' objects from collection.
 
         Parameters
         ----------
