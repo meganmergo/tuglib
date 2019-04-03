@@ -65,6 +65,6 @@ trim = '[:, 24:2023]'
 
 images = FitsCollection(location=path, gain=0.57, read_noise=4.11)
 
-master_bias = bias_combine(images, method='sum', output='master_bias.fits',
+master_bias = bias_combine(images, method='median', output='master_bias.fits',
                            masks=masks, trim=trim, OBJECT='BIAS')
 ```
