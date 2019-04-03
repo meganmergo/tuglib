@@ -55,7 +55,7 @@ def image_combine(images, method='median', output=None,
     >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
     >>> trim = '[:, 24:2023]'
     >>>
-    >>> images = FitsCollection(location=path, gain=0.57, read_noise=4.11))
+    >>> images = FitsCollection(location=path, gain=0.57, read_noise=4.11)
     >>> master_image = image_combine(images, method='median',
                                      output='master.fits',
                                      masks=masks, trim=trim,

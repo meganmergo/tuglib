@@ -39,3 +39,32 @@ print(filtered_flats)
 # Get 'ccd' objects from 'filtered_flats' collection.
 flats = images(filtered_flats)
 ```
+
+## Image Combine
+
+#### Generic Combine
+
+```python
+from tuglib.reduction import FitsCollection, image_combine
+
+
+images = FitsCollection('/home/user/data/m31')
+
+master_image = image_combine(images, method='sum', output='master.fits')
+```
+
+#### Bias Combine
+
+```python
+from tuglib.reduction import FitsCollection, bias_combine
+
+
+path = '/home/user/data'
+masks = ['[:, 1023:1025]', '[:1023, 56:58]']
+trim = '[:, 24:2023]'
+
+images = FitsCollection(location=path, gain=0.57, read_noise=4.11)
+
+master_bias = bias_combine(images, method='sum', output='master_bias.fits',
+                           masks=masks, trim=trim, OBJECT='BIAS')
+```
