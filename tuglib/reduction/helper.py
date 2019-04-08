@@ -55,7 +55,7 @@ def get_fits_header(filename):
     return keywords, values, comments, dtypes
 
 
-def make_mask(shape, area):
+def helper_mask(shape, area, fill=True):
     """
     Make a mask specific to the given area.
 
@@ -68,6 +68,9 @@ def make_mask(shape, area):
     area : str
         The area to be masked.
 
+    fill : bool, optional
+        Masked area filled by 'fill' value. Default value 'True'.
+
     Returns
     -------
     m : np.array
@@ -76,13 +79,79 @@ def make_mask(shape, area):
     Examples
     --------
 
-    >>> m = make_mask((1024, 1024), '[100:200, 23:55]')
+    >>> m = helper_mask((1024, 1024), '[100:200, 23:55]')
     """
 
-    m = np.full(shape, False, dtype=bool)
-    exec('m' + area + ' = True')
+    if not isinstance(shape, tuple):
+        raise TypeError(
+            "'shape' shuld be a 'tuple' object.")
+
+    if not isinstance(area, str):
+        raise TypeError(
+            "'masks' should be a 'str' object.")
+
+    if not isinstance(fill, bool):
+        raise TypeError("'fill' should be a 'bool' object.")
+
+    m = np.full(shape, not fill, dtype=bool)
+
+    if fill:
+        exec('m' + area + ' = True')
+    else:
+        exec('m' + area + ' = False')
 
     return m
+
+
+def make_mask(shape, masks, fill=True):
+    """
+    Make a mask specific to the given area.
+
+    Parameters
+    ----------
+
+    shape : tuple
+        Size of mask (m, n)
+
+    masks : str or list of str
+        The area to be masked.
+
+    fill : bool, optional
+        Masked area filled by 'fill' value. Default value 'True'.
+
+    Returns
+    -------
+    m : np.array
+        Masked area.
+
+    Examples
+    --------
+
+    >>> shape = (1024, 1024)
+    >>> masks = ['[100:200, 23:55]', '[511, :]']
+    >>> m = make_mask(shape, masks)
+    """
+
+    if not isinstance(shape, tuple):
+        raise TypeError(
+            "'shape' shuld be a 'tuple' object.")
+
+    if not isinstance(masks, (str, list)):
+        raise TypeError(
+            "'masks' should be 'str' or 'list' object.")
+
+    if not isinstance(fill, bool):
+        raise TypeError("'fill' should be a 'bool' object.")
+
+    if isinstance(masks, list):
+        mask = helper_mask(shape, masks[0], fill=fill)
+        for m in masks[1:]:
+            tmp_mask = helper_mask(shape, m, fill=fill)
+            mask |= tmp_mask
+    else:
+        mask = helper_mask(shape, masks, fill=fill)
+
+    return mask
 
 
 class FitsCollection(object):
@@ -278,7 +347,7 @@ class FitsCollection(object):
 
     def ccds(self, masks=None, trim=None, **kwargs):
         """
-        Get 'CCDData' objects from collection.
+        Generator that yields each 'ccdproc.CCDData' objects in the collection.
 
         Parameters
         ----------
@@ -291,9 +360,10 @@ class FitsCollection(object):
         **kwargs :
             Any additional keywords are used to filter the items returned.
 
-        Returns
-        -------
-        ccds: list of CCDData
+        Yields
+        ------
+        'ccdproc.CCDData'
+            yield the next 'ccdproc.CCDData' in the collection.
 
         Examples
         --------
@@ -314,7 +384,7 @@ class FitsCollection(object):
             if not isinstance(trim, str):
                 raise TypeError("'trim' should be a 'str' object.")
 
-        records = list()
+        # records = list()
 
         tmp = np.full(len(self._collection), True, dtype=bool)
 
@@ -328,13 +398,7 @@ class FitsCollection(object):
 
         mask = None
         if masks is not None:
-            if isinstance(masks, list):
-                mask = make_mask(shape, masks[0])
-                for m in masks[1:]:
-                    tmp_mask = make_mask(shape, m)
-                    mask |= tmp_mask
-            else:
-                mask = make_mask(shape, masks)
+            mask = make_mask(shape, masks)
 
         if (self._gain is not None) and (self._read_noise is not None):
             for filename in self._collection[tmp]['filename']:
@@ -348,32 +412,35 @@ class FitsCollection(object):
 
                 gain_corrected = gain_correct(data_with_deviation, self._gain)
 
-                records.append(gain_corrected)
+                yield gain_corrected
+                # records.append(gain_corrected)
 
-            return records
+            # return records
+        else:
+            for filename in self._collection[tmp]['filename']:
+                ccd = CCDData.read(filename, unit=self._unit)
 
-        for filename in self._collection[tmp]['filename']:
-            ccd = CCDData.read(filename, unit=self._unit)
+                ccd.mask = mask
+                ccd = trim_image(ccd, trim)
 
-            ccd.mask = mask
-            ccd = trim_image(ccd, trim)
+                yield ccd
+                # records.append(ccd)
 
-            records.append(ccd)
-
-        return records
+            # return records
 
     def datas(self, **kwargs):
         """
-        Get raw 'numpy.ndarray' objects from collection.
+        Generator that yields each 'numpy.ndarray' objects in the collection.
 
         Parameters
         ----------
         **kwargs :
             Any additional keywords are used to filter the items returned
 
-        Returns
-        -------
-        datas: list of 'numpy.ndarray'
+        Yields
+        ------
+        'numpy.ndarray'
+            yield the next 'numpy.ndarray' in the collection.
 
         Examples
         --------
@@ -381,7 +448,8 @@ class FitsCollection(object):
         >>> images = FitsCollection(location='/home/user/data/fits/')
         >>> bias_datas = images.datas(OBJECT='BIAS')
         """
-        records = list()
+
+        # records = list()
 
         tmp = np.full(len(self._collection), True, dtype=bool)
 
@@ -390,23 +458,26 @@ class FitsCollection(object):
                 tmp = tmp & (self._collection[key] == val)
 
         for filename in self._collection[tmp]['filename']:
-            data = fits.getdata(filename)
-            records.append(data)
+            yield fits.getdata(filename)
+            # data = fits.getdata(filename)
+            # records.append(data)
 
-        return records
+        # return records
 
     def headers(self, **kwargs):
         """
-        Get 'astropy.io.fits.header.Header' objects from collection.
+        Generator that yields each 'astropy.io.fits.header.Header'
+        objects in the collection.
 
         Parameters
         ----------
         **kwargs :
             Any additional keywords are used to filter the items returned
 
-        Returns
-        -------
-        datas: list of 'astropy.io.fits.header.Header'
+        Yields
+        ------
+        'astropy.io.fits.header.Header'
+            yield the next 'astropy.io.fits.header.Header' in the collection.
 
         Examples
         --------
@@ -414,7 +485,8 @@ class FitsCollection(object):
         >>> images = FitsCollection(location='/home/user/data/fits/')
         >>> bias_headers = images.headers(OBJECT='BIAS')
         """
-        records = list()
+
+        # records = list()
 
         tmp = np.full(len(self._collection), True, dtype=bool)
 
@@ -423,40 +495,108 @@ class FitsCollection(object):
                 tmp = tmp & (self._collection[key] == val)
 
         for filename in self._collection[tmp]['filename']:
-            data = fits.getheader(filename)
-            records.append(data)
+            header = fits.getheader(filename)
+            yield header
+            # records.append(header)
 
-        return records
-
-    def _hdus(self, **kwargs):
-        records = list()
-
-        tmp = np.full(len(self._collection), True, dtype=bool)
-
-        if len(kwargs) != 0:
-            for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key] == val)
-
-        for filename in self._collection[tmp]['filename']:
-            hdu = fits.open(filename)
-            records.append(hdu)
-
-        return records
+        # return records
 
     def __getitem__(self, key):
         return self._collection[key]
 
-    def __call__(self, collection=None, **kwargs):
-        if collection is not None:
-            ccds = list()
+    def __call__(self, collection=None, masks=None, trim=None, **kwargs):
+        """
+        Generator that yields each 'ccdproc.CCDData' objects in the collection.
 
-            for filename in collection['filename']:
+        Parameters
+        ----------
+        collection : 'FitsCollection.collection' or optional
+            Filtered collection.
+
+        masks : str, list of str or optional
+            Area to be masked.
+
+        trim : str or optional
+            Trim section.
+
+        **kwargs :
+            Any additional keywords are used to filter the items returned.
+
+        Yields
+        ------
+        'ccdproc.CCDData'
+            yield the next 'ccdproc.CCDData' in the collection.
+
+        Examples
+        --------
+
+        >>> mask = '[:, 1000:1046]'
+        >>> trim = '[100:1988, :]'
+        >>>
+        >>> images = FitsCollection(
+                location='/home/user/data/fits/', gain=0.57, read_noise=4.11)
+        >>>
+        >>> query = images['EXPTIME'] == 100.0
+        >>> sub_collections = images[query]
+        >>>
+        >>> ccds = images(sub_collections, masks=mask, trim=trim)
+        """
+
+        if masks is not None:
+            if not isinstance(masks, (str, list, type(None))):
+                raise TypeError(
+                    "'masks' should be 'str', 'list' or 'None' object.")
+
+        if trim is not None:
+            if not isinstance(trim, str):
+                raise TypeError("'trim' should be a 'str' object.")
+
+        if collection is None:
+            return self.ccds(masks=masks, trim=trim, **kwargs)
+
+        # records = list()
+
+        tmp = np.full(len(collection), True, dtype=bool)
+
+        if len(kwargs) != 0:
+            for key, val in kwargs.items():
+                tmp = tmp & (collection[key] == val)
+
+        x = collection[tmp]['NAXIS1'][0]
+        y = collection[tmp]['NAXIS2'][0]
+        shape = (y, x)
+
+        mask = None
+        if masks is not None:
+            mask = make_mask(shape, masks)
+
+        if (self._gain is not None) and (self._read_noise is not None):
+            for filename in collection[tmp]['filename']:
                 ccd = CCDData.read(filename, unit=self._unit)
-                ccds.append(ccd)
 
-            return ccds
+                ccd.mask = mask
+                ccd = trim_image(ccd, trim)
 
-        return self.ccds(**kwargs)
+                data_with_deviation = create_deviation(
+                    ccd, gain=self._gain, readnoise=self._read_noise)
+
+                gain_corrected = gain_correct(data_with_deviation, self._gain)
+
+                yield gain_corrected
+                # records.append(gain_corrected)
+
+            # return records
+
+        for filename in self._collection[tmp]['filename']:
+            ccd = CCDData.read(filename, unit=self._unit)
+
+            ccd.mask = mask
+            ccd = trim_image(ccd, trim)
+
+            yield ccd
+            # records.append(ccd)
+
+        # return records
 
 
 # It doesn't work well. Just for proof of concept.

@@ -53,18 +53,22 @@ images = FitsCollection('/home/user/data/m31')
 master_image = image_combine(images, method='sum', output='master.fits')
 ```
 
-#### Bias Combine
+#### Bias and Dark Combine
 
 ```python
-from tuglib.reduction import FitsCollection, bias_combine
+from tuglib.reduction import FitsCollection, bias_combine, dark_combine
 
 
-path = '/home/user/data'
+path = '/home/user/data/20181026'
 masks = ['[:, 1023:1025]', '[:1023, 56:58]']
 trim = '[:, 24:2023]'
 
 images = FitsCollection(location=path, gain=0.57, read_noise=4.11)
 
-master_bias = bias_combine(images, method='median', output='master_bias.fits',
-                           masks=masks, trim=trim, OBJECT='BIAS')
+bias_ccds = images.ccds(OBJECT='BIAS', trim=trim, masks=masks)
+master_bias = bias_combine(bias_ccds, method='median')
+
+dark_ccds = images.ccds(OBJECT='DARK', EXPTIME='10')
+master_dark = dark_combine(dark_ccds, master_bias, trim=trim, masks=masks)
+
 ```
