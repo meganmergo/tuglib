@@ -50,7 +50,8 @@ from tuglib.reduction import FitsCollection, image_combine
 
 images = FitsCollection('/home/user/data/m31')
 
-master_image = image_combine(images, method='sum', output='master.fits')
+ccds = images.ccds(OBJECT='M31_R')
+master_image = image_combine(ccds, method='sum', output='master.fits')
 ```
 
 #### Bias and Dark Combine
