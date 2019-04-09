@@ -162,6 +162,59 @@ def bias_combine(images, method='median', output=None,
 def dark_combine(images, master_bias=None, method='median',
                  output=None, masks=None, trim=None):
 
+    """
+    Dark Combine.
+
+    Parameters
+    ----------
+    images : generator or list of 'ccdproc.CCDData'
+        Images to be combined.
+
+    master_bias : ccdproc.CCDData
+        Bias image.
+
+    method : str
+        Method to combine images:
+
+        - average : To combine by calculating the average.
+        - median : To combine by calculating the median.
+        - sum : To combine by calculating the sum.
+
+        Default is 'median'.
+
+    output : None or str
+        If it is None, function returns just 'ccdproc.CCDData'.
+        If it is 'str', function returns 'ccdproc.CCDData' and creates file.
+
+    masks : str, list of str or optional
+        Area to be masked.
+
+    trim : str or optional
+        Trim section.
+
+    Returns
+    -------
+    master_ccd : ccdproc.CCDData
+        Combined Images.
+
+    Examples
+    --------
+
+    >>> from tuglib.reduction import FitsCollection, bias_combine, dark_combine
+    >>>
+    >>> path = '/home/user/data/'
+    >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
+    >>> trim = '[:, 24:2023]'
+    >>>
+    >>> images = FitsCollection(location=path, gain=0.57, read_noise=4.11))
+    >>>
+    >>> bias_ccds = images.ccds(OBJECT='BIAS', trim=trim, masks=masks)
+    >>> dark_ccds = images.ccds(OBJECT='DARK', trim=trim, masks=masks)
+    >>>
+    >>> master_bias = bias_combine(bias_ccds, method='median')
+    >>> master_dark = dark_combine(dark_ccds, master_bias, method='median')
+    """
+
     if not isinstance(images, (list, types.GeneratorType)):
         raise TypeError(
             "'images' should be a 'ccdproc.CCDData' object.")
@@ -230,5 +283,31 @@ def dark_combine(images, master_bias=None, method='median',
     return master_darks
 
 
-def flat_combine():
+def flat_combine(images, master_bias=None, master_dark=None, method='median',
+                 output=None, masks=None, trim=None):
+
+    if not isinstance(images, (list, types.GeneratorType)):
+        raise TypeError(
+            "'images' should be a 'ccdproc.CCDData' object.")
+
+    if not isinstance(master_bias, CCDData):
+        raise TypeError(
+            "'master_bias' should be a 'ccdproc.CCDData' object.")
+
+    if method not in ('average', 'median', 'sum'):
+        raise ValueError(
+            "'method' should be 'average', 'median' or 'sum'.")
+
+    if masks is not None:
+        if not isinstance(masks, (str, list, type(None))):
+            raise TypeError(
+                "'masks' should be 'str', 'list' or 'None' object.")
+
+    if trim is not None:
+        if not isinstance(trim, str):
+            raise TypeError("'trim' should be a 'str' object.")
+
+    if not isinstance(output, (type(None), str)):
+        raise TypeError("'output' should be 'None' or 'str' objects.")
+
     pass
