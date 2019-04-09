@@ -54,10 +54,11 @@ ccds = images.ccds(OBJECT='M31_R')
 master_image = image_combine(ccds, method='sum', output='master.fits')
 ```
 
-#### Bias and Dark Combine
+#### Bias, Dark and Flat Combine
 
 ```python
-from tuglib.reduction import FitsCollection, bias_combine, dark_combine
+from tuglib.reduction import FitsCollection
+from tuglib.reduction import bias_combine, dark_combine, flat_combine
 
 
 path = '/home/user/data/20181026'
@@ -67,9 +68,10 @@ trim = '[:, 24:2023]'
 images = FitsCollection(location=path, gain=0.57, read_noise=4.11)
 
 bias_ccds = images.ccds(OBJECT='BIAS', trim=trim, masks=masks)
+dark_ccds = images.ccds(OBJECT='DARK', EXPTIME=10, trim=trim, masks=masks)
+flat_ccds = images.ccds(OBJECT='FLAT', FILTER='V', trim=trim, masks=masks)
+
 master_bias = bias_combine(bias_ccds, method='median')
-
-dark_ccds = images.ccds(OBJECT='DARK', EXPTIME='10')
-master_dark = dark_combine(dark_ccds, master_bias, trim=trim, masks=masks)
-
+master_dark = dark_combine(dark_ccds, master_bias, method='median')
+master_flat = flat_combine(flat_ccds, master_bias, master_dark, method='median')
 ```

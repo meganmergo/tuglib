@@ -5,12 +5,14 @@ __all__ = ['FitsCollection', 'make_mask', 'image_combine', 'bias_combine',
 
 import types
 
+import astropy.units as u
+from ccdproc import CCDData, trim_image, combine, subtract_bias, subtract_dark
+
 from .helper import FitsCollection, make_mask
-from ccdproc import CCDData, trim_image, combine, subtract_bias
 
 
 # Generic image combine function.
-# This will be bases for all bias/dark/flat combine methods
+# This will be base for all bias/dark/flat combine methods
 def image_combine(images, method='median', output=None, masks=None, trim=None):
     """
     Generic Image Combine Method.
@@ -94,10 +96,9 @@ def image_combine(images, method='median', output=None, masks=None, trim=None):
             ccd.mask = mask
 
         ccd = trim_image(ccd, trim)
-
         ccds[i] = ccd
 
-    master_ccd = combine(ccds, method=method)
+    master_ccd = combine(ccds, method=method, output_verify='ignore')
 
     if output is not None:
         master_ccd.write(output, overwrite=True, output_verify='ignore')
@@ -185,6 +186,7 @@ def dark_combine(images, master_bias=None, method='median',
     output : None or str
         If it is None, function returns just 'ccdproc.CCDData'.
         If it is 'str', function returns 'ccdproc.CCDData' and creates file.
+        Output name will be 'output'_EXPTIME.fits
 
     masks : str, list of str or optional
         Area to be masked.
@@ -286,13 +288,77 @@ def dark_combine(images, master_bias=None, method='median',
 def flat_combine(images, master_bias=None, master_dark=None, method='median',
                  output=None, masks=None, trim=None):
 
+    """
+    Flat Combine.
+
+    Parameters
+    ----------
+    images : generator or list of 'ccdproc.CCDData'
+        Images to be combined.
+
+    master_bias : ccdproc.CCDData
+        Master Bias image.
+
+    master_dark : ccdproc.CCDData
+        Master Dark image.
+
+    method : str
+        Method to combine images:
+
+        - average : To combine by calculating the average.
+        - median : To combine by calculating the median.
+        - sum : To combine by calculating the sum.
+
+        Default is 'median'.
+
+    output : None or str
+        If it is None, function returns just 'ccdproc.CCDData'.
+        If it is 'str', function returns 'ccdproc.CCDData' and creates file.
+
+    masks : str, list of str or optional
+        Area to be masked.
+
+    trim : str or optional
+        Trim section.
+
+    Returns
+    -------
+    master_ccd : ccdproc.CCDData
+        Combined Images.
+
+    Examples
+    --------
+
+    >>> from tuglib.reduction import FitsCollection
+    >>> from tuglib.reduction import bias_combine, dark_combine, flat_combine
+    >>>
+    >>> path = '/home/user/data/'
+    >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
+    >>> trim = '[:, 24:2023]'
+    >>>
+    >>> images = FitsCollection(location=path, gain=0.57, read_noise=4.11))
+    >>>
+    >>> bias_ccds = images.ccds(OBJECT='BIAS', trim=trim, masks=masks)
+    >>> dark_ccds = images.ccds(OBJECT='DARK', trim=trim, masks=masks)
+    >>> flat_ccds = images.ccds(OBJECT='FLAT', FILTER='V',
+                                trim=trim, masks=masks)
+    >>>
+    >>> master_bias = bias_combine(bias_ccds, method='median')
+    >>> master_dark = dark_combine(dark_ccds, master_bias, method='median')
+    >>> master_flat = flat_combine(flat_ccds, master_bias, master_dark)
+    """
+
     if not isinstance(images, (list, types.GeneratorType)):
         raise TypeError(
             "'images' should be a 'ccdproc.CCDData' object.")
 
-    if not isinstance(master_bias, CCDData):
+    if not isinstance(master_bias, (type(None), CCDData)):
         raise TypeError(
-            "'master_bias' should be a 'ccdproc.CCDData' object.")
+            "'master_bias' should be 'None' or 'ccdproc.CCDData' object.")
+
+    if not isinstance(master_dark, (type(None), CCDData)):
+        raise TypeError(
+            "'master_dark' should be 'None' or  'ccdproc.CCDData' object.")
 
     if method not in ('average', 'median', 'sum'):
         raise ValueError(
@@ -310,4 +376,43 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
     if not isinstance(output, (type(None), str)):
         raise TypeError("'output' should be 'None' or 'str' objects.")
 
-    pass
+    if isinstance(images, types.GeneratorType):
+        ccds = list(images)
+    else:
+        ccds = images
+
+    mask = None
+    if masks is not None:
+        shape = ccds[0].shape
+        mask = make_mask(shape, masks)
+
+    for i, ccd in enumerate(ccds):
+        if mask is not None:
+            ccd.mask = mask
+
+        ccd = trim_image(ccd, trim)
+
+        ccds[i] = ccd
+
+    if master_dark is not None:
+        dark_exptime = master_dark.meta['EXPTIME'] * u.second
+
+    for i, ccd in enumerate(ccds):
+        if master_bias is not None:
+            ccd = subtract_bias(ccd, master_bias)
+
+        if master_dark is not None:
+            data_exptime = ccd.meta['EXPTIME'] * u.second
+            ccd = subtract_dark(
+                ccd, master_dark, dark_exposure=dark_exptime,
+                data_exposure=data_exptime, exposure_time='EXPTIME',
+                exposure_unit=u.second, scale=True)
+
+        ccds[i] = ccd
+
+    master_ccd = combine(ccds, method=method, output_verify='ignore')
+
+    if output is not None:
+        master_ccd.write(output, overwrite=True, output_verify='ignore')
+
+    return master_ccd

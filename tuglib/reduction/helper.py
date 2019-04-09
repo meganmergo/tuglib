@@ -402,7 +402,8 @@ class FitsCollection(object):
 
         if (self._gain is not None) and (self._read_noise is not None):
             for filename in self._collection[tmp]['filename']:
-                ccd = CCDData.read(filename, unit=self._unit)
+                ccd = CCDData.read(filename, unit=self._unit,
+                                   output_verify='ignore')
 
                 ccd.mask = mask
                 ccd = trim_image(ccd, trim)
@@ -418,7 +419,8 @@ class FitsCollection(object):
             # return records
         else:
             for filename in self._collection[tmp]['filename']:
-                ccd = CCDData.read(filename, unit=self._unit)
+                ccd = CCDData.read(filename, unit=self._unit,
+                                   output_verify='ignore')
 
                 ccd.mask = mask
                 ccd = trim_image(ccd, trim)
