@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-__all__ = ['FitsCollection', 'make_mask', 'image_combine', 'bias_combine',
-           'dark_combine', 'flat_combine']
+__all__ = ['FitsCollection', 'image_combine', 'bias_combine', 'dark_combine',
+           'flat_combine']
 
 import types
 
