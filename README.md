@@ -76,8 +76,9 @@ master_dark = dark_combine(dark_ccds, master_bias, method='median')
 master_flat = flat_combine(flat_ccds, master_bias, master_dark, method='median')
 ```
 
-```python
 #### Basic Reduction (Bias, Dark and Flat Corrections)
+
+```python
 from tuglib.reduction import FitsCollection
 from tuglib.reduction import bias_combine, dark_combine, flat_combine
 from tuglib.reduction import ccdproc
