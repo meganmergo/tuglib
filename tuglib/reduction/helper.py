@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
-__all__ = ['FitsCollection', 'make_mask']
+__all__ = ['FitsCollection', 'make_mask', 'convert_to_fits']
 
+import types
 from os import path
 from glob import glob
 
@@ -19,7 +20,38 @@ from ccdproc import ImageFileCollection, CCDData, create_deviation,\
 FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip')
 
 
-# Another helper method for FitsCollection class.
+def convert_to_fits(images, filenames='data', separation='_', start=1):
+    """
+    Convert 'ccdproc.CCCData' to 'fits' file.
+
+    Parameters
+    ----------
+    images : 'CCDData', lisf of 'CCDData' or generator.
+        Images to converted.
+
+    filenames : str
+        Output filename.
+
+    separation : str
+        Separator between output and index number.
+
+    """
+
+    if not isinstance(images, (CCDData, list, types.GeneratorType)):
+        raise TypeError(
+            "'images' should be 'CCDData', 'list' or 'generator'.")
+
+    if isinstance(images, CCDData):
+        output = filenames + separation + str(start).zfill(3)
+        images.write(output, overwrite=True, output_verify='ignore')
+    elif isinstance(images, (list, types.GeneratorType)):
+        for ccd in images:
+            output = filenames + separation + str(start).zfill(3)
+            ccd.write(output, overwrite=True, output_verify='ignore')
+            start += 1
+
+
+# Helper method for FitsCollection class.
 def get_fits_header(filename):
     """
     Converts 'Header' to list of 'keywords', 'values', 'comments' and 'dtypes'.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-__all__ = ['FitsCollection', 'image_combine', 'bias_combine', 'dark_combine',
-           'flat_combine', 'ccdproc']
+__all__ = ['FitsCollection', 'convert_to_fits', 'image_combine',
+           'bias_combine', 'dark_combine', 'flat_combine', 'ccdproc']
 
 import types
 
@@ -9,7 +9,7 @@ import astropy.units as u
 from ccdproc import CCDData, trim_image, combine,\
     subtract_bias, subtract_dark, flat_correct
 
-from .helper import FitsCollection, make_mask
+from .helper import FitsCollection, make_mask, convert_to_fits
 
 
 # Generic image combine function.
