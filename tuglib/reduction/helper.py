@@ -20,7 +20,8 @@ from ccdproc import ImageFileCollection, CCDData, create_deviation,\
 FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip')
 
 
-def convert_to_fits(images, filenames='data', separation='_', start=1):
+def convert_to_fits(images, filenames='data', separation='_',
+                    start=1, zero_fill=3):
     """
     Convert 'ccdproc.CCCData' to 'fits' file.
 
@@ -35,18 +36,49 @@ def convert_to_fits(images, filenames='data', separation='_', start=1):
     separation : str
         Separator between output and index number.
 
+    start : int
+        Output file start index.
+
+    zero_fill : int
+        Zero padding.
+
+    Returns
+    -------
+    'fits' file.
+
+    Examples
+    --------
+    >>> from tuglib.reduction import FitsCollection, convert_to_fits
+    >>>
+    >>> c = FitsCollection('/home/user/data')
+    >>>
+    >>> bias_ccds = c.ccds(OBJECT='BIAS')
+    >>> convert_to_fits(bias_ccds, filenames='bias')
     """
 
     if not isinstance(images, (CCDData, list, types.GeneratorType)):
         raise TypeError(
             "'images' should be 'CCDData', 'list' or 'generator'.")
 
+    if not isinstance(filenames, str):
+        raise TypeError("'filenames' should be a 'str' object.")
+
+    if not isinstance(separation, str):
+        raise TypeError("'separation' should be a 'str' object.")
+
+    if not isinstance(start, int):
+        raise TypeError("'start' should be a 'int' object.")
+
+    if not isinstance(zero_fill, int):
+        raise TypeError("'zero_fill' should be a 'int' object.")
+
     if isinstance(images, CCDData):
-        output = filenames + separation + str(start).zfill(3)
+        output = filenames + separation + str(start).zfill(3) + '.fits'
         images.write(output, overwrite=True, output_verify='ignore')
     elif isinstance(images, (list, types.GeneratorType)):
         for ccd in images:
-            output = filenames + separation + str(start).zfill(3)
+            output =\
+                filenames + separation + str(start).zfill(zero_fill) + '.fits'
             ccd.write(output, overwrite=True, output_verify='ignore')
             start += 1
 
