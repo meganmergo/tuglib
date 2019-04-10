@@ -79,25 +79,10 @@ master_flat = flat_combine(flat_ccds, master_bias, master_dark, method='median')
 #### Basic Reduction (Bias, Dark and Flat Corrections)
 
 ```python
-from tuglib.reduction import FitsCollection
-from tuglib.reduction import bias_combine, dark_combine, flat_combine
 from tuglib.reduction import ccdproc
 
-path = '/home/user/data/'
-masks = ['[:, 1023:1025]', '[:1023, 56:58]']
-trim = '[:, 24:2023]'
-
-images = FitsCollection(location=path, gain=0.57, read_noise=4.11))
-
-bias_ccds = images.ccds(OBJECT='BIAS', trim=trim, masks=masks)
-dark_ccds = images.ccds(OBJECT='DARK', trim=trim, masks=masks)
-flat_ccds = images.ccds(OBJECT='FLAT', FILTER='V', trim=trim, masks=masks)
 
 sci_ccds = images.ccds(OBJECT='Star', FILTER='V', trim=trim, masks=masks)
-
-master_bias = bias_combine(bias_ccds, method='median')
-master_dark = dark_combine(dark_ccds, master_bias, method='median')
-master_flat = flat_combine(flat_ccds, master_bias, master_dark)
 
 # Yield a generator which point reduced images.
 reduced_ccds = ccdproc(sci_ccds, master_bias, master_dark, master_flat)
