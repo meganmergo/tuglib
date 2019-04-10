@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
 __all__ = ['FitsCollection', 'image_combine', 'bias_combine', 'dark_combine',
-           'flat_combine']
+           'flat_combine', 'ccdproc']
 
 import types
 
 import astropy.units as u
-from ccdproc import CCDData, trim_image, combine, subtract_bias, subtract_dark
+from ccdproc import CCDData, trim_image, combine,\
+    subtract_bias, subtract_dark, flat_correct
 
 from .helper import FitsCollection, make_mask
 
@@ -416,3 +417,135 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
         master_ccd.write(output, overwrite=True, output_verify='ignore')
 
     return master_ccd
+
+
+def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
+            masks=None, trim=None, output=None):
+
+    """
+    Perform image reduction (bias, dark and flat corretion) on ccd data.
+
+    Parameters
+    ----------
+    images : generator, type of 'ccdproc.CCDData'
+        Images to be combined.
+
+    master_bias : ccdproc.CCDData
+        Master Bias image.
+
+    master_dark : ccdproc.CCDData
+        Master Dark image.
+
+    master_flat : ccdproc.CCDData
+        Master Flat image.
+
+    masks : str, list of str or optional
+        Area to be masked.
+
+    trim : str or optional
+        Trim section.
+
+    output : None or str
+        If it is None, function returns just 'ccdproc.CCDData'.
+        If it is 'str', function returns 'ccdproc.CCDData' and creates file.
+
+    Yields
+    ------
+    'ccdproc.CCDData'
+        yield the next 'ccdproc.CCDData'.
+
+    Returns
+    -------
+    'ccdproc.CCDData'
+        Reduced Images.
+
+    Examples
+    --------
+
+    >>> from tuglib.reduction import FitsCollection
+    >>> from tuglib.reduction import bias_combine, dark_combine, flat_combine
+    >>> from tuglib.reduction import ccdproc
+    >>>
+    >>> path = '/home/user/data/'
+    >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
+    >>> trim = '[:, 24:2023]'
+    >>>
+    >>> images = FitsCollection(location=path, gain=0.57, read_noise=4.11))
+    >>>
+    >>> bias_ccds = images.ccds(OBJECT='BIAS', trim=trim, masks=masks)
+    >>> dark_ccds = images.ccds(OBJECT='DARK', trim=trim, masks=masks)
+    >>> flat_ccds = images.ccds(OBJECT='FLAT', FILTER='V',
+                                trim=trim, masks=masks)
+    >>>
+    >>> sci_ccds = images.ccds(OBJECT='Star', FILTER='V',
+                               trim=trim, masks=masks)
+    >>>
+    >>> master_bias = bias_combine(bias_ccds, method='median')
+    >>> master_dark = dark_combine(dark_ccds, master_bias, method='median')
+    >>> master_flat = flat_combine(flat_ccds, master_bias, master_dark)
+    >>>
+    >>> # Yield a generator which point reduced images.
+    >>> reduced_ccds = ccdproc(sci_ccds, master_bias, master_dark, master_flat)
+    """
+
+    if not isinstance(images, types.GeneratorType):
+        raise TypeError(
+            "'images' should be a 'ccdproc.CCDData' object.")
+
+    if not isinstance(master_bias, (type(None), CCDData)):
+        raise TypeError(
+            "'master_bias' should be 'None' or 'ccdproc.CCDData' object.")
+
+    if not isinstance(master_dark, (type(None), CCDData)):
+        raise TypeError(
+            "'master_dark' should be 'None' or  'ccdproc.CCDData' object.")
+
+    if not isinstance(master_flat, (type(None), CCDData)):
+        raise TypeError(
+            "'master_flat' should be 'None' or  'ccdproc.CCDData' object.")
+
+    if masks is not None:
+        if not isinstance(masks, (str, list, type(None))):
+            raise TypeError(
+                "'masks' should be 'str', 'list' or 'None' object.")
+
+    if trim is not None:
+        if not isinstance(trim, str):
+            raise TypeError("'trim' should be a 'str' object.")
+
+    if not isinstance(output, (type(None), str)):
+        raise TypeError("'output' should be 'None' or 'str' objects.")
+
+    ccd = next(images)
+
+    mask = None
+    if masks is not None:
+        shape = ccd.shape
+        mask = make_mask(shape, masks)
+
+    if master_dark is not None:
+        dark_exptime = master_dark.meta['EXPTIME'] * u.second
+
+    for ccd in images:
+        if mask is not None:
+            ccd.mask = mask
+
+        ccd = trim_image(ccd, trim)
+
+        if master_bias is not None:
+            ccd = subtract_bias(ccd, master_bias)
+
+        if master_dark is not None:
+            data_exptime = ccd.meta['EXPTIME'] * u.second
+            ccd = subtract_dark(
+                ccd, master_dark, dark_exposure=dark_exptime,
+                data_exposure=data_exptime, exposure_time='EXPTIME',
+                exposure_unit=u.second, scale=True)
+
+        if master_flat is not None:
+            ccd = flat_correct(ccd, master_flat)
+
+        if output is not None:
+            ccd.write(output, overwrite=True, output_verify='ignore')
+        else:
+            yield ccd
