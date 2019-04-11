@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-__all__ = ['FitsCollection', 'make_mask', 'convert_to_fits']
+__all__ = ['FitsCollection', 'make_mask', 'convert_to_fits',
+           'convert_to_ccddata']
 
 import types
 from os import path
@@ -20,6 +21,71 @@ from ccdproc import ImageFileCollection, CCDData, create_deviation,\
 FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip')
 
 
+def convert_to_ccddata(images, gain=None, read_noise=None):
+    """
+    Convert 'fits' file to 'ccdproc.CCCData' object.
+
+    Parameters
+    ----------
+    images : str or list of str.
+        Images to converted.
+
+    gain : float
+        Gain (u.electron / u.adu)
+
+    read_noise : float
+        Read Noise (u.electron).
+
+    Yields
+    ------
+    'ccdproc.CCDData'
+        yield the next 'ccdproc.CCDData'.
+
+    Examples
+    --------
+    >>> from tuglib.reduction import convert_to_ccddata
+    >>> from glob import glob
+    >>>
+    >>> images = glob('/home/user/data/image*.fits')
+    >>>
+    >>> ccds = convert_to_ccddata(images, gain=0.37, read_noise=4.11)
+    """
+
+    if not isinstance(images, (str, list)):
+        raise TypeError(
+            "'images' should be 'str' or 'list' object.")
+
+    if not isinstance(gain, (type(None), float)):
+        raise TypeError("'gain' should be 'None' or 'float' object.")
+
+    if not isinstance(read_noise, (type(None), float)):
+        raise TypeError("'read_noise' should be 'None' or 'float' object.")
+
+    if isinstance(images, str):
+        images = [images]
+
+    unit = u.adu
+
+    if gain is not None:
+        gain = gain * u.electron / u.adu
+
+    if read_noise is not None:
+        read_noise = read_noise * u.electron
+
+    for image in images:
+        ccd = CCDData.read(image, unit=unit, output_verify='ignore')
+
+        if (gain is not None) and (read_noise is not None):
+            data_with_deviation = create_deviation(
+                ccd, gain=gain, readnoise=read_noise)
+
+            gain_corrected = gain_correct(data_with_deviation, gain)
+
+            yield gain_corrected
+        else:
+            yield ccd
+
+
 def convert_to_fits(images, filenames='data', separation='_',
                     start=1, zero_fill=3):
     """
@@ -27,7 +93,7 @@ def convert_to_fits(images, filenames='data', separation='_',
 
     Parameters
     ----------
-    images : 'CCDData', lisf of 'CCDData' or generator.
+    images : 'CCDData', list of 'CCDData' or generator.
         Images to converted.
 
     filenames : str
