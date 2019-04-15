@@ -224,7 +224,7 @@ def dark_combine(images, master_bias=None, method='median',
         raise TypeError(
             "'images' should be a 'ccdproc.CCDData' object.")
 
-    if not isinstance(master_bias, CCDData):
+    if not isinstance(master_bias, (type(None), CCDData)):
         raise TypeError(
             "'master_bias' should be a 'ccdproc.CCDData' object.")
 
@@ -447,9 +447,10 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
     trim : str or optional
         Trim section.
 
-    output : None or str
+    output : None or list
+        List of output file names.
         If it is None, function returns just 'ccdproc.CCDData'.
-        If it is 'str', function returns 'ccdproc.CCDData' and creates file.
+        If it is 'list', function creates 'fits' file.
 
     Yields
     ------
@@ -515,8 +516,8 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
         if not isinstance(trim, str):
             raise TypeError("'trim' should be a 'str' object.")
 
-    if not isinstance(output, (type(None), str)):
-        raise TypeError("'output' should be 'None' or 'str' objects.")
+    if not isinstance(output, (type(None), list)):
+        raise TypeError("'output' should be 'None' or 'list' objects.")
 
     ccd = next(images)
 
@@ -528,6 +529,7 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
     if master_dark is not None:
         dark_exptime = master_dark.meta['EXPTIME'] * u.second
 
+    i = 0
     for ccd in images:
         if mask is not None:
             ccd.mask = mask
@@ -548,6 +550,7 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
             ccd = flat_correct(ccd, master_flat)
 
         if output is not None:
-            ccd.write(output, overwrite=True, output_verify='ignore')
+            ccd.write(output[i], overwrite=True, output_verify='ignore')
+            i += 1
         else:
             yield ccd

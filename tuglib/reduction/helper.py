@@ -18,7 +18,8 @@ from ccdproc import ImageFileCollection, CCDData, create_deviation,\
 
 
 # Available file extensions. New extensions can be added in the future.
-FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip')
+FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip',
+                   'fts', 'fts.gz', 'fts.zip')
 
 
 def convert_to_ccddata(images, gain=None, read_noise=None):
@@ -86,8 +87,7 @@ def convert_to_ccddata(images, gain=None, read_noise=None):
             yield ccd
 
 
-def convert_to_fits(images, filenames='data', separation='_',
-                    start=1, zero_fill=3):
+def convert_to_fits(images, filenames, prefix=None, suffix=None):
     """
     Convert 'ccdproc.CCCData' to 'fits' file.
 
@@ -96,17 +96,14 @@ def convert_to_fits(images, filenames='data', separation='_',
     images : 'CCDData', list of 'CCDData' or generator.
         Images to converted.
 
-    filenames : str
-        Output filename.
+    filenames : str or list of str
+        Output filenames.
 
-    separation : str
-        Separator between output and index number.
+    prefix : optional, str
+        Output file prefix.
 
-    start : int
-        Output file start index.
-
-    zero_fill : int
-        Zero padding.
+    suffix : str
+        Output file suffix.
 
     Returns
     -------
@@ -119,34 +116,42 @@ def convert_to_fits(images, filenames='data', separation='_',
     >>> c = FitsCollection('/home/user/data')
     >>>
     >>> bias_ccds = c.ccds(OBJECT='BIAS')
-    >>> convert_to_fits(bias_ccds, filenames='bias')
+    >>> filenames = c[c['OJBECT'] == 'BIAS']['filename']
+    >>> convert_to_fits(bias_ccds, filenames=filenames, prefix='test_')
     """
 
     if not isinstance(images, (CCDData, list, types.GeneratorType)):
         raise TypeError(
             "'images' should be 'CCDData', 'list' or 'generator'.")
 
-    if not isinstance(filenames, str):
-        raise TypeError("'filenames' should be a 'str' object.")
+    if not isinstance(filenames, (str, list)):
+        raise TypeError("'filenames' should be 'str' or 'list' object.")
 
-    if not isinstance(separation, str):
-        raise TypeError("'separation' should be a 'str' object.")
+    if not isinstance(prefix, str):
+        raise TypeError("'prefix' should be a 'str' object.")
 
-    if not isinstance(start, int):
-        raise TypeError("'start' should be a 'int' object.")
-
-    if not isinstance(zero_fill, int):
-        raise TypeError("'zero_fill' should be a 'int' object.")
+    if not isinstance(suffix, int):
+        raise TypeError("'suffix' should be a 'int' object.")
 
     if isinstance(images, CCDData):
-        output = filenames + separation + str(start).zfill(3) + '.fits'
+        if prefix is not None:
+            output = prefix + filenames
+
+        if suffix is not None:
+            output = filenames + suffix
+
         images.write(output, overwrite=True, output_verify='ignore')
     elif isinstance(images, (list, types.GeneratorType)):
+        i = 0
         for ccd in images:
-            output =\
-                filenames + separation + str(start).zfill(zero_fill) + '.fits'
+            if prefix is not None:
+                output = prefix + filenames[i]
+
+            if suffix is not None:
+                output = filenames[i] + suffix
+
             ccd.write(output, overwrite=True, output_verify='ignore')
-            start += 1
+            i += 1
 
 
 # Helper method for FitsCollection class.
@@ -316,7 +321,7 @@ class FitsCollection(object):
         Return 'ccdproc.CCDData' objects from collection. If any positional
         arguments like 'fits' header keywords, it filters result.
 
-    datas(**kwargs)
+    data(**kwargs)
         Return 'np.array' (fits.data) objects from collection. If any positional
         arguments like 'fits' header keywords, it filters result.
 
@@ -560,7 +565,7 @@ class FitsCollection(object):
 
             # return records
 
-    def datas(self, **kwargs):
+    def data(self, **kwargs):
         """
         Generator that yields each 'numpy.ndarray' objects in the collection.
 
@@ -578,10 +583,8 @@ class FitsCollection(object):
         --------
 
         >>> images = FitsCollection(location='/home/user/data/fits/')
-        >>> bias_datas = images.datas(OBJECT='BIAS')
+        >>> bias_datas = images.data(OBJECT='BIAS')
         """
-
-        # records = list()
 
         tmp = np.full(len(self._collection), True, dtype=bool)
 
@@ -591,10 +594,6 @@ class FitsCollection(object):
 
         for filename in self._collection[tmp]['filename']:
             yield fits.getdata(filename)
-            # data = fits.getdata(filename)
-            # records.append(data)
-
-        # return records
 
     def headers(self, **kwargs):
         """
@@ -618,8 +617,6 @@ class FitsCollection(object):
         >>> bias_headers = images.headers(OBJECT='BIAS')
         """
 
-        # records = list()
-
         tmp = np.full(len(self._collection), True, dtype=bool)
 
         if len(kwargs) != 0:
@@ -629,9 +626,6 @@ class FitsCollection(object):
         for filename in self._collection[tmp]['filename']:
             header = fits.getheader(filename)
             yield header
-            # records.append(header)
-
-        # return records
 
     def __getitem__(self, key):
         return self._collection[key]
