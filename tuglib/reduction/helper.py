@@ -519,8 +519,6 @@ class FitsCollection(object):
             if not isinstance(trim, str):
                 raise TypeError("'trim' should be a 'str' object.")
 
-        # records = list()
-
         tmp = np.full(len(self._collection), True, dtype=bool)
 
         if len(kwargs) != 0:
@@ -549,9 +547,6 @@ class FitsCollection(object):
                 gain_corrected = gain_correct(data_with_deviation, self._gain)
 
                 yield gain_corrected
-                # records.append(gain_corrected)
-
-            # return records
         else:
             for filename in self._collection[tmp]['filename']:
                 ccd = CCDData.read(filename, unit=self._unit,
@@ -561,9 +556,6 @@ class FitsCollection(object):
                 ccd = trim_image(ccd, trim)
 
                 yield ccd
-                # records.append(ccd)
-
-            # return records
 
     def data(self, **kwargs):
         """
@@ -680,8 +672,6 @@ class FitsCollection(object):
         if collection is None:
             return self.ccds(masks=masks, trim=trim, **kwargs)
 
-        # records = list()
-
         tmp = np.full(len(collection), True, dtype=bool)
 
         if len(kwargs) != 0:
@@ -709,20 +699,14 @@ class FitsCollection(object):
                 gain_corrected = gain_correct(data_with_deviation, self._gain)
 
                 yield gain_corrected
-                # records.append(gain_corrected)
+        else:
+            for filename in collection[tmp]['filename']:
+                ccd = CCDData.read(filename, unit=self._unit)
 
-            # return records
+                ccd.mask = mask
+                ccd = trim_image(ccd, trim)
 
-        for filename in self._collection[tmp]['filename']:
-            ccd = CCDData.read(filename, unit=self._unit)
-
-            ccd.mask = mask
-            ccd = trim_image(ccd, trim)
-
-            yield ccd
-            # records.append(ccd)
-
-        # return records
+                yield ccd
 
 
 # It doesn't work well. Just for proof of concept.
