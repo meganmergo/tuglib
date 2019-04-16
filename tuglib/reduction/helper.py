@@ -463,7 +463,7 @@ class FitsCollection(object):
         names = list(cs.keys())
         names = ['filename'] + names
         dtypes = list(cs.values())
-        dtypes = ['U64'] + dtypes
+        dtypes = ['U256'] + dtypes
 
         self._collection = Table(names=names, dtype=dtypes)
 
