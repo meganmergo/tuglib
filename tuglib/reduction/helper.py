@@ -480,6 +480,39 @@ class FitsCollection(object):
 
         self._keywords = self._collection.colnames
 
+    def files_filtered(self, **kwargs):
+        """
+        Determine files whose keywords have listed values.
+
+        Parameters
+        ----------
+        **kwargs :
+            Any additional keywords are used to filter the items returned.
+
+        Returns
+        -------
+        list of str
+            Filtered file names from collection.
+
+        Examples
+        --------
+
+        >>> from tuglib.reduction import FitsCollection
+        >>>
+        >>> c = FitsCollection('/home/user/data')
+        >>> files = c.files_filtered(OBJECT='BIAS')
+        """
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        if len(kwargs) != 0:
+            for key, val in kwargs.items():
+                tmp = tmp & (self._collection[key] == val)
+
+            return list(self._collection[tmp]['filename'])
+
+        return list()
+
     def ccds(self, masks=None, trim=None, **kwargs):
         """
         Generator that yields each 'ccdproc.CCDData' objects in the collection.
