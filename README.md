@@ -16,14 +16,16 @@ biases = images.ccds(OBJECT='BIAS')
 
 # Filtered search example.
 # Select 'filename' and 'exptime' columns from collection
-# where 'object' keyword equals 'FLAT' and
+# where 'object' or 'imagetyp' keywords equals 'FLAT' and
 # 'filter' keyword equals 'W1:03 V W2:00 Empty' and
 # 'exptime' keyword less than 0.06 seconds.
-f1 = images['OBJECT'] == 'FLAT'
+
+f0 = images['OBJECT'] == 'FLAT'
+f1 = images['IMAGETYP'] == 'FLAT
 f2 = images['FILTER'] == 'W1:03 V W2:00 Empty'
 f3 = images['EXPTIME'] < 0.06
 
-filtered_flats = images[f1 & f2 & f3]['filename', 'EXPTIME']
+filtered_flats = images[(f0 | f1) & f2 & f3]['filename', 'EXPTIME']
 print(filtered_flats)
 ```
 
