@@ -558,6 +558,9 @@ class FitsCollection(object):
             for key, val in kwargs.items():
                 tmp = tmp & (self._collection[key] == val)
 
+        if np.count_nonzero(tmp) == 0:
+            yield None
+
         x = self._collection[tmp]['NAXIS1'][0]
         y = self._collection[tmp]['NAXIS2'][0]
         shape = (y, x)

@@ -85,7 +85,10 @@ def image_combine(images, method='median', output=None, masks=None, trim=None):
         raise TypeError("'output' should be 'None' or 'str' objects.")
 
     if isinstance(images, types.GeneratorType):
-        ccds = list(images)
+        try:
+            ccds = list(images)
+        except IndexError:
+            return None
     else:
         ccds = images
 
@@ -245,7 +248,10 @@ def dark_combine(images, master_bias=None, method='median',
         raise TypeError("'output' should be 'None' or 'str' objects.")
 
     if isinstance(images, types.GeneratorType):
-        ccds = list(images)
+        try:
+            ccds = list(images)
+        except IndexError:
+            return None
     else:
         ccds = images
 
@@ -386,7 +392,10 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
         raise TypeError("'output' should be 'None' or 'str' objects.")
 
     if isinstance(images, types.GeneratorType):
-        ccds = list(images)
+        try:
+            ccds = list(images)
+        except IndexError:
+            return None
     else:
         ccds = images
 
@@ -521,6 +530,9 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
         raise TypeError("'output' should be 'None' or 'list' objects.")
 
     ccd = next(images)
+
+    if ccd is None:
+        yield None
 
     mask = None
     if masks is not None:
