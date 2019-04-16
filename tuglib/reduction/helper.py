@@ -480,12 +480,16 @@ class FitsCollection(object):
 
         self._keywords = self._collection.colnames
 
-    def files_filtered(self, **kwargs):
+    def files_filtered(self, include_path=False, **kwargs):
         """
         Determine files whose keywords have listed values.
 
         Parameters
         ----------
+        include_path : bool
+            If is True, returned files include full path.
+            Default is False.
+
         **kwargs :
             Any additional keywords are used to filter the items returned.
 
@@ -509,7 +513,12 @@ class FitsCollection(object):
             for key, val in kwargs.items():
                 tmp = tmp & (self._collection[key] == val)
 
-            return list(self._collection[tmp]['filename'])
+            files = list(self._collection[tmp]['filename'])
+
+            if include_path:
+                files = [file.split('/')[-1] for file in files]
+
+            return files
 
         return list()
 
