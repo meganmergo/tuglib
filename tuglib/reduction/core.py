@@ -274,11 +274,17 @@ def dark_combine(images, master_bias=None, method='median',
 
     master_darks = list()
     for darks in raw_darks.values():
-        bias_subtracked_darks = list()
-        for dark in darks:
-            bias_subtracked_darks.append(subtract_bias(dark, master_bias))
+        if master_bias is not None:
+            bias_subtracked_darks = list()
 
-        master_darks.append(image_combine(bias_subtracked_darks, method=method))
+            for dark in darks:
+                bias_subtracked_darks.append(subtract_bias(dark, master_bias))
+
+            master_darks.append(
+                image_combine(bias_subtracked_darks, method=method))
+        else:
+            master_darks.append(
+                image_combine(darks, method=method))
 
     if output is not None:
         for master_dark in master_darks:
@@ -447,7 +453,7 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
     trim : str or optional
         Trim section.
 
-    output : None or list
+    output : None or list of str
         List of output file names.
         If it is None, function returns just 'ccdproc.CCDData'.
         If it is 'list', function creates 'fits' file.
@@ -456,11 +462,6 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
     ------
     'ccdproc.CCDData'
         yield the next 'ccdproc.CCDData'.
-
-    Returns
-    -------
-    'ccdproc.CCDData'
-        Reduced Images.
 
     Examples
     --------
