@@ -4,7 +4,7 @@ __all__ = ['FitsCollection', 'make_mask', 'convert_to_fits',
            'convert_to_ccddata']
 
 import types
-from os import path
+from os import path, sep
 from glob import glob
 
 import numpy as np
@@ -127,10 +127,10 @@ def convert_to_fits(images, filenames, prefix=None, suffix=None):
     if not isinstance(filenames, (str, list)):
         raise TypeError("'filenames' should be 'str' or 'list' object.")
 
-    if not isinstance(prefix, str):
+    if not isinstance(prefix, (type(None), str)):
         raise TypeError("'prefix' should be a 'str' object.")
 
-    if not isinstance(suffix, int):
+    if not isinstance(suffix, (type(None), str)):
         raise TypeError("'suffix' should be a 'int' object.")
 
     if isinstance(images, CCDData):
@@ -509,18 +509,20 @@ class FitsCollection(object):
 
         tmp = np.full(len(self._collection), True, dtype=bool)
 
-        if len(kwargs) != 0:
-            for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key] == val)
+        for key, val in kwargs.items():
+            tmp = tmp & (self._collection[key] == val)
 
-            files = list(self._collection[tmp]['filename'])
+        if np.count_nonzero(tmp) == 0:
+            return list()
 
-            if include_path:
-                files = [file.split('/')[-1] for file in files]
+        files = list(self._collection[tmp]['filename'])
 
+        if include_path:
             return files
 
-        return list()
+        files = [file.split(sep)[-1] for file in files]
+
+        return files
 
     def ccds(self, masks=None, trim=None, **kwargs):
         """

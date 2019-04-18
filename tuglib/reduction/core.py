@@ -435,6 +435,36 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
     return master_ccd
 
 
+def _ccdproc_helper(ccd, mask, trim, master_bias, master_dark,
+                    master_flat, output, dark_exptime):
+    """
+    Internal use only!
+    """
+
+    if mask is not None:
+        ccd.mask = mask
+
+    ccd = trim_image(ccd, trim)
+
+    if master_bias is not None:
+        ccd = subtract_bias(ccd, master_bias)
+
+    if master_dark is not None:
+        data_exptime = ccd.meta['EXPTIME'] * u.second
+        ccd = subtract_dark(
+            ccd, master_dark, dark_exposure=dark_exptime,
+            data_exposure=data_exptime, exposure_time='EXPTIME',
+            exposure_unit=u.second, scale=True)
+
+    if master_flat is not None:
+        ccd = flat_correct(ccd, master_flat)
+
+    if output is not None:
+        ccd.write(output, overwrite=True, output_verify='ignore')
+    else:
+        yield ccd
+
+
 def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
             masks=None, trim=None, output=None):
     """
@@ -527,22 +557,16 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
     if not isinstance(output, (type(None), list)):
         raise TypeError("'output' should be 'None' or 'list' objects.")
 
-    ccd = next(images)
-
-    if ccd is None:
-        yield None
-
     mask = None
-    if masks is not None:
-        shape = ccd.shape
-        mask = make_mask(shape, masks)
 
     if master_dark is not None:
         dark_exptime = master_dark.meta['EXPTIME'] * u.second
 
     i = 0
     for ccd in images:
-        if mask is not None:
+        if (mask is None) and (masks is not None):
+            shape = ccd.shape
+            mask = make_mask(shape, masks)
             ccd.mask = mask
 
         ccd = trim_image(ccd, trim)
