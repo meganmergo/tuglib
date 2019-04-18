@@ -134,21 +134,23 @@ def convert_to_fits(images, filenames, prefix=None, suffix=None):
         raise TypeError("'suffix' should be a 'int' object.")
 
     if isinstance(images, CCDData):
+        output = filenames
         if prefix is not None:
-            output = prefix + filenames
+            output = prefix + output
 
         if suffix is not None:
-            output = filenames + suffix
+            output = output + suffix
 
         images.write(output, overwrite=True, output_verify='ignore')
     elif isinstance(images, (list, types.GeneratorType)):
         i = 0
         for ccd in images:
+            output = filenames[i]
             if prefix is not None:
-                output = prefix + filenames[i]
+                output = prefix + output
 
             if suffix is not None:
-                output = filenames[i] + suffix
+                output = output + suffix
 
             ccd.write(output, overwrite=True, output_verify='ignore')
             i += 1

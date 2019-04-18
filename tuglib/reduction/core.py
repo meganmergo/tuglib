@@ -293,8 +293,8 @@ def dark_combine(images, master_bias=None, method='median',
 
     if output is not None:
         for master_dark in master_darks:
-            filename = output + '_' + str(master_dark.meta['EXPTIME'])
-            + '.fits'
+            filename = \
+                output + '_' + str(master_dark.meta['EXPTIME']) + '.fits'
             master_dark.write(filename, overwrite=True, output_verify='ignore')
 
     return master_darks
