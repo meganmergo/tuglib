@@ -4,7 +4,7 @@ __all__ = ['FitsCollection', 'make_mask', 'convert_to_fits',
            'convert_to_ccddata']
 
 import types
-from os import path, sep
+from os import path, sep, mkdir
 from glob import glob
 
 import numpy as np
@@ -87,7 +87,8 @@ def convert_to_ccddata(images, gain=None, read_noise=None):
             yield ccd
 
 
-def convert_to_fits(images, filenames, prefix=None, suffix=None):
+def convert_to_fits(images, filenames, location=None,
+                    prefix=None, suffix=None):
     """
     Convert 'ccdproc.CCCData' to 'fits' file.
 
@@ -98,6 +99,9 @@ def convert_to_fits(images, filenames, prefix=None, suffix=None):
 
     filenames : str or list of str
         Output filenames.
+
+    location : optional, str
+        Path where to save the 'fits' files. Default path is current path.
 
     prefix : optional, str
         Output file prefix.
@@ -127,33 +131,59 @@ def convert_to_fits(images, filenames, prefix=None, suffix=None):
     if not isinstance(filenames, (str, list)):
         raise TypeError("'filenames' should be 'str' or 'list' object.")
 
+    if not isinstance(location, (type(None), str)):
+        raise TypeError("'prefix' should be a 'str' object.")
+
     if not isinstance(prefix, (type(None), str)):
         raise TypeError("'prefix' should be a 'str' object.")
 
     if not isinstance(suffix, (type(None), str)):
         raise TypeError("'suffix' should be a 'int' object.")
 
+    if location is not None:
+        try:
+            mkdir(location)
+        except FileExistsError:
+            pass
+    else:
+        location = ''
+
     if isinstance(images, CCDData):
-        output = filenames
+        if not isinstance(filenames, str):
+            raise TypeError("'filenames' should be a 'str' object.")
+
+        output = filenames.split(sep)[-1]
+
         if prefix is not None:
             output = prefix + output
 
         if suffix is not None:
-            output = output + suffix
+            tmp = output.split('.')
 
+            output = tmp[0] + suffix
+
+            if len(tmp) > 1:
+                output = output + '.' + tmp[-1]
+
+        output = path.join(location, output)
         images.write(output, overwrite=True, output_verify='ignore')
-    elif isinstance(images, (list, types.GeneratorType)):
-        i = 0
-        for ccd in images:
-            output = filenames[i]
+    else:
+        for i, ccd in enumerate(images):
+            output = filenames[i].split(sep)[-1]
+
             if prefix is not None:
                 output = prefix + output
 
             if suffix is not None:
-                output = output + suffix
+                tmp = output.split('.')
 
+                output = tmp[0] + suffix
+
+                if len(tmp) > 1:
+                    output = output + '.' + tmp[-1]
+
+            output = path.join(location, output)
             ccd.write(output, overwrite=True, output_verify='ignore')
-            i += 1
 
 
 # Helper method for FitsCollection class.
