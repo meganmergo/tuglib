@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-__all__ = ['FitsCollection', 'convert_to_fits', 'convert_to_ccddata',
-           'image_combine', 'bias_combine', 'dark_combine', 'flat_combine',
+__all__ = ['image_combine', 'bias_combine', 'dark_combine', 'flat_combine',
            'ccdproc']
 
 import types
@@ -10,8 +9,7 @@ import astropy.units as u
 from ccdproc import CCDData, trim_image, combine,\
     subtract_bias, subtract_dark, flat_correct
 
-from .helper import FitsCollection, make_mask, convert_to_fits,\
-    convert_to_ccddata
+from .helper import make_mask
 
 
 # Generic image combine function.
@@ -52,7 +50,8 @@ def image_combine(images, method='median', output=None, masks=None, trim=None):
     Examples
     --------
 
-    >>> from tuglib.reduction import FitsCollection, image_combine
+    >>> from tuglib.io import FitsCollection
+    >>> from tuglib.reduction import image_combine
     >>>
     >>> path = '/home/user/data/'
     >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
@@ -104,10 +103,12 @@ def image_combine(images, method='median', output=None, masks=None, trim=None):
         ccd = trim_image(ccd, trim)
         ccds[i] = ccd
 
-    master_ccd = combine(ccds, method=method, output_verify='ignore')
+    master_ccd = combine(ccds, method=method,
+                         output_verify='silentfix+ignore')
 
     if output is not None:
-        master_ccd.write(output, overwrite=True, output_verify='ignore')
+        master_ccd.write(output, overwrite=True,
+                         output_verify='silentfix+ignore')
 
     return master_ccd
 
@@ -149,7 +150,8 @@ def bias_combine(images, method='median', output=None,
     Examples
     --------
 
-    >>> from tuglib.reduction import FitsCollection, bias_combine
+    >>> from tuglib.io import FitsCollection
+    >>> from tuglib.reduction import bias_combine
     >>>
     >>> path = '/home/user/data/'
     >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
@@ -207,7 +209,8 @@ def dark_combine(images, master_bias=None, method='median',
     Examples
     --------
 
-    >>> from tuglib.reduction import FitsCollection, bias_combine, dark_combine
+    >>> from tuglib.io import FitsCollection
+    >>> from tuglib.reduction import bias_combine, dark_combine
     >>>
     >>> path = '/home/user/data/'
     >>> masks = ['[:, 1023:1025]', '[:1023, 56:58]']
@@ -295,7 +298,8 @@ def dark_combine(images, master_bias=None, method='median',
         for master_dark in master_darks:
             filename = \
                 output + '_' + str(master_dark.meta['EXPTIME']) + '.fits'
-            master_dark.write(filename, overwrite=True, output_verify='ignore')
+            master_dark.write(filename, overwrite=True,
+                              output_verify='silentfix+ignore')
 
     return master_darks
 
@@ -343,7 +347,7 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
     Examples
     --------
 
-    >>> from tuglib.reduction import FitsCollection
+    >>> from tuglib.io import FitsCollection
     >>> from tuglib.reduction import bias_combine, dark_combine, flat_combine
     >>>
     >>> path = '/home/user/data/'
@@ -427,10 +431,11 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
 
         ccds[i] = ccd
 
-    master_ccd = combine(ccds, method=method, output_verify='ignore')
+    master_ccd = combine(ccds, method=method, output_verify='silentfix+ignore')
 
     if output is not None:
-        master_ccd.write(output, overwrite=True, output_verify='ignore')
+        master_ccd.write(output, overwrite=True,
+                         output_verify='silentfix+ignore')
 
     return master_ccd
 
@@ -473,7 +478,7 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
     Examples
     --------
 
-    >>> from tuglib.reduction import FitsCollection
+    >>> from tuglib.io import FitsCollection
     >>> from tuglib.reduction import bias_combine, dark_combine, flat_combine
     >>> from tuglib.reduction import ccdproc
     >>>
@@ -555,7 +560,8 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
             ccd = flat_correct(ccd, master_flat)
 
         if output is not None:
-            ccd.write(output[i], overwrite=True, output_verify='ignore')
+            ccd.write(output[i], overwrite=True,
+                      output_verify='silentfix+ignore')
             i += 1
         else:
             yield ccd
