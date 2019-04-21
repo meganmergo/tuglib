@@ -4,7 +4,7 @@ Yet another **Astronomical Reduction and Analysis Tool**.
 ## FitsCollection
 
 ```python
-from tuglib.reduction import FitsCollection
+from tuglib.io import FitsCollection
 
 
 # Get all fits file from directory.
@@ -47,7 +47,8 @@ flats = images(filtered_flats)
 #### Generic Combine
 
 ```python
-from tuglib.reduction import FitsCollection, image_combine
+from tuglib.io import FitsCollection
+from tuglib.reduction import image_combine
 
 
 images = FitsCollection('/home/user/data/m31')
@@ -59,7 +60,7 @@ master_image = image_combine(ccds, method='sum', output='master.fits')
 #### Bias, Dark and Flat Combine
 
 ```python
-from tuglib.reduction import FitsCollection
+from tuglib.io import FitsCollection
 from tuglib.reduction import bias_combine, dark_combine, flat_combine
 
 
