@@ -440,8 +440,8 @@ def flat_combine(images, master_bias=None, master_dark=None, method='median',
     return master_ccd
 
 
-def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
-            masks=None, trim=None, output=None):
+def ccdproc(images, master_bias=None, master_dark=None,
+            master_flat=None, masks=None, trim=None):
     """
     Perform image reduction (bias, dark and flat corretion) on ccd data.
 
@@ -464,11 +464,6 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
 
     trim : str or optional
         Trim section.
-
-    output : None or list of str
-        List of output file names.
-        If it is None, function returns just 'ccdproc.CCDData'.
-        If it is 'list', function creates 'fits' file.
 
     Yields
     ------
@@ -529,15 +524,11 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
         if not isinstance(trim, str):
             raise TypeError("'trim' should be a 'str' object.")
 
-    if not isinstance(output, (type(None), list)):
-        raise TypeError("'output' should be 'None' or 'list' objects.")
-
     mask = None
 
     if master_dark is not None:
         dark_exptime = master_dark.meta['EXPTIME'] * u.second
 
-    i = 0
     for ccd in images:
         if (mask is None) and (masks is not None):
             shape = ccd.shape
@@ -559,9 +550,4 @@ def ccdproc(images, master_bias=None, master_dark=None, master_flat=None,
         if master_flat is not None:
             ccd = flat_correct(ccd, master_flat)
 
-        if output is not None:
-            ccd.write(output[i], overwrite=True,
-                      output_verify='silentfix+ignore')
-            i += 1
-        else:
-            yield ccd
+        yield ccd
