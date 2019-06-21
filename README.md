@@ -3,7 +3,7 @@ Yet another **Astronomical Reduction and Analysis Tool**.
 
 ## FitsCollection
 
-### Basic usage
+#### Basic usage
 
 ```python
 from tuglib.io import FitsCollection
@@ -42,6 +42,19 @@ print(filtered_flats)
 ```python
 # Get 'ccd' objects from 'filtered_flats' collection.
 flats = images(filtered_flats)
+```
+
+#### Concatenate two collection
+
+```python
+from tuglib.io import FitsCollection
+
+c1 = FitsCollection(location='/home/user/datas/20190620')
+c2 = FitsCollection(location='/home/user/datas/20190621')
+
+c = c1 + c2
+
+files = c.files_filtered(OBJECT='BIAS')
 ```
 
 #### Uploading 'fits' files to remote computer
