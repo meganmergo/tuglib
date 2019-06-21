@@ -3,6 +3,8 @@ Yet another **Astronomical Reduction and Analysis Tool**.
 
 ## FitsCollection
 
+### Basic usage
+
 ```python
 from tuglib.io import FitsCollection
 
@@ -40,6 +42,17 @@ print(filtered_flats)
 ```python
 # Get 'ccd' objects from 'filtered_flats' collection.
 flats = images(filtered_flats)
+```
+
+#### Uploading 'fits' files to remote computer
+
+```python
+from tuglib.io import FitsCollection
+
+images = FitsCollection(location='/home/user/datas/20190621')
+
+images.upload(hostname='192.168.0.1', username='guest', password='1234',
+              remote_path='/home/guest/works', OBJECT='BIAS')
 ```
 
 ## Image Combine
@@ -89,15 +102,4 @@ sci_ccds = images.ccds(OBJECT='Star', FILTER='V', trim=trim, masks=masks)
 
 # Yield a generator which point reduced images.
 reduced_ccds = ccdproc(sci_ccds, master_bias, master_dark, master_flat)
-```
-
-#### Uploading 'fits' files to remote computer
-
-```python
-from tuglib.io import FitsCollection
-
-images = FitsCollection(location='/home/user/datas/20190621')
-
-images.upload(hostname='192.168.0.1', username='guest', password='1234',
-              remote_path='/home/guest/works', OBJECT='BIAS')
 ```
