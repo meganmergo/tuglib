@@ -7,9 +7,11 @@ import types
 from os import path, sep, mkdir
 from glob import glob
 
+import paramiko
+
 import numpy as np
 
-from astropy.table import Table
+from astropy.table import Table, vstack
 from astropy.io import fits
 import astropy.units as u
 
@@ -335,7 +337,8 @@ class FitsCollection(object):
         self._keywords = None
         self._collection = None
 
-        self._prepare()
+        if self._location:
+            self._prepare()
 
     @property
     def location(self):
@@ -412,6 +415,27 @@ class FitsCollection(object):
                 self._collection[key][row_index] = h[1][i]
 
         self._keywords = self._collection.colnames
+
+    def _concat(self, collection_1, collection_2, location_1, location_2,
+                filenames_1, filenames_2, keywords_1, gain, read_noise, unit):
+        """
+        Only for internal use.
+        """
+
+        c = [collection_1, collection_2]
+        collection = vstack(c)
+
+        filenames = filenames_1 + filenames_2
+
+        self._collection = collection
+
+        self._location = [location_1, location_2]
+        self._filenames = filenames
+        self._keywords = keywords_1.copy()
+
+        self._gain = gain
+        self._read_noise = read_noise
+        self._unit = unit
 
     def files_filtered(self, include_path=False, **kwargs):
         """
@@ -599,6 +623,32 @@ class FitsCollection(object):
             header = fits.getheader(filename)
             yield header
 
+    def __add__(self, collection):
+        if not (self._keywords == collection.keywords):
+            raise ValueError(
+                'The header keywords of the two collections must be the same.')
+
+        if self._gain != collection.gain:
+            raise ValueError(
+                'The gain of the two collections must be the same.')
+
+        if self._read_noise != collection.read_noise:
+            raise ValueError(
+                'The read_noise of the two collections must be the same.')
+
+        if self._unit != collection.unit:
+            raise ValueError(
+                'The unit of the two collections must be the same.')
+
+        c = FitsCollection('')
+
+        c._concat(self._collection, collection.collection.copy(),
+                  self._location, collection.location,
+                  self._filenames, collection.filenames.copy(),
+                  self._keywords, self._gain, self._read_noise, self._unit)
+
+        return c
+
     def __getitem__(self, key):
         return self._collection[key]
 
@@ -687,3 +737,87 @@ class FitsCollection(object):
                 ccd = trim_image(ccd, trim)
 
                 yield ccd
+
+    def upload(self, hostname, username, password, remote_path, **kwargs):
+        """
+        Upload 'fits' file to remote computer with SFTP.
+
+        Parameters
+        ----------
+
+        hostname : str
+            The server to connect to.
+
+        username : str
+            The username to authenticate as.
+
+        password : str
+            Used for password authentication.
+
+        remote_path : str
+            The destination path on the SFTP server.
+
+        Returns
+        -------
+
+        Bool
+
+        Examples
+        --------
+
+        >>> from tuglib.io import FitsCollection
+        >>>
+        >>> c = FitsCollection('/home/user/images')
+        >>> c.upload(hostname='192.168.0.1', username='guest',
+                     password='1234', remote_path='/home/guest/works')
+        """
+
+        if not isinstance(hostname, str):
+            raise TypeError("'hostname' should be a str object.")
+
+        if not isinstance(username, str):
+            raise TypeError("' should be a str object.")
+
+        if not isinstance(password, str):
+            raise TypeError("'password' should be a str object.")
+
+        if not isinstance(remote_path, str):
+            raise TypeError("'remote_path' should be a str object.")
+
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        try:
+            ssh.connect(hostname=hostname, username=username,
+                        password=password)
+
+            tmp = np.full(len(self._collection), True, dtype=bool)
+
+            for key, val in kwargs.items():
+                tmp = tmp & (self._collection[key] == val)
+
+            if np.count_nonzero(tmp) == 0:
+                return list()
+
+            files_with_path = list(self._collection[tmp]['filename'])
+
+            if not files_with_path:
+                ssh.close()
+                raise ValueError('No file found in collection!')
+
+            files_without_path =\
+                [file.split(sep)[-1] for file in files_with_path]
+
+            sftp = ssh.open_sftp()
+
+            for i, local_file in enumerate(files_with_path):
+                remote_file = path.join(remote_path, files_without_path[i])
+                sftp.put(local_file, remote_file)
+
+            sftp.close()
+            ssh.close()
+
+        except IOError as e:
+            raise IOError(e)
+
+        return True
