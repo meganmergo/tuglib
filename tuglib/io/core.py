@@ -264,6 +264,9 @@ class FitsCollection(object):
         Return 'fits.header' objects from collection. If any positional
         arguments like 'fits' header keywords, it filters result.
 
+    upload(hostname, username, password, remote_path, **kwargs)
+        Upload 'fits' file to remote computer with SFTP.
+
     Examples
     --------
 
