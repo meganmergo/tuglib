@@ -20,7 +20,7 @@ def radec_to_pixel_coordinate(ccd, coord):
     ccd : CCDData
         CCDData object.
 
-    coord : tuple
+    coord : SkyCoord
         Contain RA and Dec coordinates.
 
     Returns
@@ -32,7 +32,8 @@ def radec_to_pixel_coordinate(ccd, coord):
     Examples
     --------
 
-    >>> coord = ('13:12:11.10', '+36:49:27.13')
+    >>> coord = SkyCoord('13:12:11.10', '+36:49:27.13',\
+                         unit=(u.hourangle, u.deg))
     >>> p = radec_to_pixel_coordinate(ccd, coord)
     """
 
@@ -53,7 +54,7 @@ def get_object_coordinate_from_simbad(name):
     Returns
     -------
 
-    coord : tuple
+    coord : SkyCoord
         RA and Dec of object.
 
     Examples
