@@ -12,8 +12,11 @@ from astropy import units as u
 
 import numpy as np
 
+from .helper import radec_to_pixel_coordinate, get_object_coordinate_from_simbad
+
+
 # Generic photometry function
-def phot(images, positions=None, radius=3.0, annulus=6.0, dannulus=8.0, output=None):
+def phot(images, positions=None, radius=6.0, annulus=8.0, dannulus=10.0, output=None):
     """
     Basic circular aperture photometry of given images.
 
@@ -55,11 +58,12 @@ def phot(images, positions=None, radius=3.0, annulus=6.0, dannulus=8.0, output=N
 
     Examples
     --------
-
     >>> from tuglib.io import FitsCollection
     >>> from tuglib.analysis import phot
-    >>>
-    >>> path = '/home/user/data/'
+    >>> location = '/Users/ykilic/Desktop/data/'
+    >>> images = FitsCollection(location, file_extension="fit")
+    >>> fits_images = images.ccds(IMAGETYP='object')
+    >>> phot(fits_images, positions=[(1400.65, 1545.78)], radius=6.0, annulus=8.0, dannulus=10)
     """
 
     if not isinstance(images, (list, types.GeneratorType)):
@@ -75,10 +79,10 @@ def phot(images, positions=None, radius=3.0, annulus=6.0, dannulus=8.0, output=N
         raise TypeError("'radius' should be a 'list' or 'float' object.")
 
     if not isinstance(annulus, (float, int)):
-        raise TypeError("'radius' should be a 'int' or 'float' object.")
+        raise TypeError("'annulus' should be a 'int' or 'float' object.")
 
     if not isinstance(dannulus, (float, int)):
-        raise TypeError("'radius' should be a 'int' or 'float' object.")
+        raise TypeError("'dannulus' should be a 'int' or 'float' object.")
 
     if not isinstance(output, (type(None), type(str))):
         raise TypeError("'output' should be 'None' or 'str' objects.")
@@ -91,8 +95,11 @@ def phot(images, positions=None, radius=3.0, annulus=6.0, dannulus=8.0, output=N
     else:
         ccds = images
 
-    ccds_phot_list = []
+    ccds_phot_list = list()
+
     for ccd in ccds:
+        exptime = ccd.meta['EXPTIME']
+
         aperture = CircularAperture(positions, r=radius)
         annulus_aperture = CircularAnnulus(positions, r_in=annulus, r_out=dannulus)
         annulus_masks = annulus_aperture.to_mask(method='center')
@@ -104,12 +111,21 @@ def phot(images, positions=None, radius=3.0, annulus=6.0, dannulus=8.0, output=N
             _, median_sigclip, _ = sigma_clipped_stats(annulus_data_1d)
             bkg_median.append(median_sigclip)
         bkg_median = np.array(bkg_median)
-        aphot = aperture_photometry(ccd, aperture)
-        aphot['annulus_median'] = bkg_median * u.adu
-        aphot['aper_bkg'] = bkg_median * aperture.area * u.adu
-        aphot['aper_sum_bkgsub'] = aphot['aperture_sum'] - aphot['aper_bkg']
-        for col in aphot.colnames:
-            aphot[col].info.format = '%.8g'  # for consistent table output
-        ccds_phot_list.append(aphot)
+        phot_table = aperture_photometry(ccd, aperture)
+        phot_table['annulus_median'] = bkg_median * u.adu
+        phot_table['aper_bkg'] = bkg_median * aperture.area * u.adu
+        phot_table['aper_sum_bkgsub'] = phot_table['aperture_sum'] - phot_table['aper_bkg']
+
+        phot_table['flux'] = phot_table['aper_sum_bkgsub'] / float(exptime)
+        phot_table['JD'] = float(ccd.meta['JD'])
+        phot_table['JD'].info.format = '%.8f'
+        phot_table['JD'].unit = 'd'
+        phot_table['aperture_sum'].info.format = '%.3f'
+        phot_table['annulus_median'].info.format = '%.3f'
+        phot_table['aper_bkg'].info.format = '%.3f'
+        phot_table['aper_sum_bkgsub'].info.format = '%.3f'
+        phot_table['flux'].info.format = '%.3f'
+
+        ccds_phot_list.append(phot_table)
 
     return vstack(ccds_phot_list)
