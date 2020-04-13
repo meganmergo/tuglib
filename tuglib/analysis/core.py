@@ -18,7 +18,7 @@ import numpy as np
 
 
 # Generic photometry function
-def phot(images, positions=None, aperture_radius=6.0, annulus=8.0, dannulus=10.0, method='exact', bg_method="median",
+def phot(images, positions=None, aperture_radius=6.0, annulus=8.0, dannulus=10.0, method='exact', bg_method='median',
          bg_box_size=50,
          gain=1.1,
          output=None):
