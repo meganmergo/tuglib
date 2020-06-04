@@ -4,24 +4,26 @@ __all__ = ['FitsCollection', 'convert_to_ccddata', 'convert_to_fits']
 
 
 import types
-from os import path, sep, mkdir
+import os
 from glob import glob
+from progress.bar import Bar
 
 import paramiko
 
 import numpy as np
 
-from astropy.table import Table, vstack
+from astropy.table import Table, vstack, Column
 from astropy.io import fits
 import astropy.units as u
 
 from ccdproc import CCDData, create_deviation, gain_correct, trim_image
 
 from ..reduction.helper import make_mask
+from .helper import find_files
 
 # Available file extensions. New extensions can be added in the future.
 FILE_EXTENSIONS = ('fit', 'fits', 'fit.gz', 'fits.gz', 'fit.zip', 'fits.zip',
-                   'fts', 'fts.gz', 'fts.zip')
+                   'fts', 'fts.gz', 'fts.zip', '')
 
 
 def convert_to_ccddata(images, gain=None, read_noise=None):
@@ -144,7 +146,7 @@ def convert_to_fits(images, filenames, location=None,
 
     if location is not None:
         try:
-            mkdir(location)
+            os.mkdir(location)
         except FileExistsError:
             pass
     else:
@@ -154,7 +156,7 @@ def convert_to_fits(images, filenames, location=None,
         if not isinstance(filenames, str):
             raise TypeError("'filenames' should be a 'str' object.")
 
-        output = filenames.split(sep)[-1]
+        output = filenames.split(os.sep)[-1]
 
         if prefix is not None:
             output = prefix + output
@@ -167,11 +169,11 @@ def convert_to_fits(images, filenames, location=None,
             if len(tmp) > 1:
                 output = output + '.' + tmp[-1]
 
-        output = path.join(location, output)
+        output = os.path.join(location, output)
         images.write(output, overwrite=True, output_verify='silentfix+ignore')
     else:
         for i, ccd in enumerate(images):
-            output = filenames[i].split(sep)[-1]
+            output = filenames[i].split(os.sep)[-1]
 
             if prefix is not None:
                 output = prefix + output
@@ -184,7 +186,7 @@ def convert_to_fits(images, filenames, location=None,
                 if len(tmp) > 1:
                     output = output + '.' + tmp[-1]
 
-            output = path.join(location, output)
+            output = os.path.join(location, output)
             ccd.write(output, overwrite=True, output_verify='silentfix+ignore')
 
 
@@ -296,34 +298,11 @@ class FitsCollection(object):
     /Users/oguzhan/tmp/20180901N/BDF/FLAT_0019_V.fits    0.05
     """
 
-    def __init__(self, location, file_extension='fits', masks=None,
-                 gain=None, read_noise=None, unit=u.adu):
-
-        if not isinstance(location, str):
-            raise TypeError(
-                "'location' should be a 'str' object.")
-
-        if not isinstance(file_extension, (str, tuple, list)):
-            raise TypeError(
-                "'file_extension' should be "
-                "'None', 'str', 'tuple' or 'list' object.")
-
-        if file_extension not in FILE_EXTENSIONS:
-            raise ValueError(
-                "'file_extension' should be "
-                "'fit, fits, fit.gz, fits.gz, fit.zip, fits.zip' type.")
-
-        if not isinstance(gain, (type(None), float)):
-            raise TypeError(
-                "'gain' should be 'None' or 'float' object.")
-
-        if not isinstance(read_noise, (type(None), float)):
-            raise TypeError(
-                "'read_noise' should be 'None' or 'float' object.")
+    def __init__(self, location, file_extension='', masks=None,
+                 unit=u.adu, gain=None, read_noise=None):
 
         self._location = location
         self._file_extension = file_extension
-
         self._masks = masks
 
         self._gain = gain
@@ -343,288 +322,8 @@ class FitsCollection(object):
         if self._location:
             self._prepare()
 
-    @property
-    def location(self):
-        return self._location
-
-    @property
-    def gain(self):
-        return self._gain
-
-    @property
-    def read_noise(self):
-        return self._read_noise
-
-    @property
-    def unit(self):
-        return self._unit
-
-    @property
-    def filenames(self):
-        return self._filenames
-
-    @property
-    def keywords(self):
-        return self._keywords
-
-    @property
-    def collection(self):
-        return self._collection
-
-    def _prepare(self):
-        """
-        Only for internal use.
-        """
-        directory = list()
-
-        if self._file_extension is None:
-            for ext in FILE_EXTENSIONS:
-                directory += path.join(self._location, '**', '*.' + ext)
-        elif isinstance(self._file_extension, (tuple, list)):
-            for ext in self._file_extension:
-                directory += path.join(self._location, '**', '*.' + ext)
-        else:  # str
-            directory = path.join(
-                self._location, '**', '*.' + self._file_extension)
-
-        self._filenames = sorted(glob(directory, recursive=True))
-
-        db = dict()
-        for filename in self._filenames:
-            h = get_fits_header(filename)
-            db[filename] = h
-
-        cs = dict()
-        for filename in self._filenames:
-            for i, key in enumerate(db[filename][0]):
-                cs[db[filename][0][i]] = db[filename][3][i]
-
-        names = list(cs.keys())
-        names = ['filename'] + names
-        dtypes = list(cs.values())
-        dtypes = ['U256'] + dtypes
-
-        self._collection = Table(names=names, dtype=dtypes)
-
-        for filename in self._filenames:
-            self._collection.add_row()
-            row_index = len(self._collection) - 1
-            self._collection['filename'][row_index] = filename
-
-            h = db[filename]
-            for i, key in enumerate(h[0]):
-                if isinstance(h[1][i], str):
-                    h[1][i] = h[1][i].strip()
-                self._collection[key][row_index] = h[1][i]
-
-        self._keywords = self._collection.colnames
-
-    def _concat(self, collection_1, collection_2, location_1, location_2,
-                filenames_1, filenames_2, keywords_1, gain, read_noise, unit):
-        """
-        Only for internal use.
-        """
-
-        c = [collection_1, collection_2]
-        collection = vstack(c)
-
-        filenames = filenames_1 + filenames_2
-
-        self._collection = collection
-
-        self._location = [location_1, location_2]
-        self._filenames = filenames
-        self._keywords = keywords_1.copy()
-
-        self._gain = gain
-        self._read_noise = read_noise
-        self._unit = unit
-
-    def files_filtered(self, include_path=False, **kwargs):
-        """
-        Determine files whose keywords have listed values.
-
-        Parameters
-        ----------
-        include_path : bool
-            If is True, returned files include full path.
-            Default is False.
-
-        **kwargs :
-            Any additional keywords are used to filter the items returned.
-
-        Returns
-        -------
-        list of str
-            Filtered file names from collection.
-
-        Examples
-        --------
-
-        >>> from tuglib.io import FitsCollection
-        >>>
-        >>> c = FitsCollection('/home/user/data')
-        >>> files = c.files_filtered(OBJECT='BIAS')
-        """
-
-        tmp = np.full(len(self._collection), True, dtype=bool)
-
-        for key, val in kwargs.items():
-            tmp = tmp & (self._collection[key] == val)
-
-        if np.count_nonzero(tmp) == 0:
-            return list()
-
-        files = list(self._collection[tmp]['filename'])
-
-        if include_path:
-            return files
-
-        files = [file.split(sep)[-1] for file in files]
-
-        return files
-
-    def ccds(self, masks=None, trim=None, **kwargs):
-        """
-        Generator that yields each 'ccdproc.CCDData' objects in the collection.
-
-        Parameters
-        ----------
-        masks : str, list of str or optional
-            Area to be masked.
-
-        trim : str or optional
-            Trim section.
-
-        **kwargs :
-            Any additional keywords are used to filter the items returned.
-
-        Yields
-        ------
-        'ccdproc.CCDData'
-            yield the next 'ccdproc.CCDData' in the collection.
-
-        Examples
-        --------
-
-        >>> mask = '[:, 1000:1046]'
-        >>> trim = '[100:1988, :]'
-        >>> images = FitsCollection(
-                location='/home/user/data/fits/', gain=0.57, read_noise=4.11)
-        >>> biases = images.ccds(OBJECT='BIAS', masks=mask, trim=trim)
-        """
-
-        if masks is not None:
-            if not isinstance(masks, (str, list, type(None))):
-                raise TypeError(
-                    "'masks' should be 'str', 'list' or 'None' object.")
-
-        if trim is not None:
-            if not isinstance(trim, str):
-                raise TypeError("'trim' should be a 'str' object.")
-
-        tmp = np.full(len(self._collection), True, dtype=bool)
-
-        if len(kwargs) != 0:
-            for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key] == val)
-
-        if np.count_nonzero(tmp) == 0:
-            yield None
-
-        x = self._collection[tmp]['NAXIS1'][0]
-        y = self._collection[tmp]['NAXIS2'][0]
-        shape = (y, x)
-
-        mask = None
-        if masks is not None:
-            mask = make_mask(shape, masks)
-
-        if (self._gain is not None) and (self._read_noise is not None):
-            for filename in self._collection[tmp]['filename']:
-                ccd = CCDData.read(filename, unit=self._unit,
-                                   output_verify='silentfix+ignore')
-
-                ccd.mask = mask
-                ccd = trim_image(ccd, trim)
-
-                data_with_deviation = create_deviation(
-                    ccd, gain=self._gain, readnoise=self._read_noise)
-
-                gain_corrected = gain_correct(data_with_deviation, self._gain)
-
-                yield gain_corrected
-        else:
-            for filename in self._collection[tmp]['filename']:
-                ccd = CCDData.read(filename, unit=self._unit,
-                                   output_verify='silentfix+ignore')
-
-                ccd.mask = mask
-                ccd = trim_image(ccd, trim)
-
-                yield ccd
-
-    def data(self, **kwargs):
-        """
-        Generator that yields each 'numpy.ndarray' objects in the collection.
-
-        Parameters
-        ----------
-        **kwargs :
-            Any additional keywords are used to filter the items returned
-
-        Yields
-        ------
-        'numpy.ndarray'
-            yield the next 'numpy.ndarray' in the collection.
-
-        Examples
-        --------
-
-        >>> images = FitsCollection(location='/home/user/data/fits/')
-        >>> bias_datas = images.data(OBJECT='BIAS')
-        """
-
-        tmp = np.full(len(self._collection), True, dtype=bool)
-
-        if len(kwargs) != 0:
-            for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key] == val)
-
-        for filename in self._collection[tmp]['filename']:
-            yield fits.getdata(filename)
-
-    def headers(self, **kwargs):
-        """
-        Generator that yields each 'astropy.io.fits.header.Header'
-        objects in the collection.
-
-        Parameters
-        ----------
-        **kwargs :
-            Any additional keywords are used to filter the items returned
-
-        Yields
-        ------
-        'astropy.io.fits.header.Header'
-            yield the next 'astropy.io.fits.header.Header' in the collection.
-
-        Examples
-        --------
-
-        >>> images = FitsCollection(location='/home/user/data/fits/')
-        >>> bias_headers = images.headers(OBJECT='BIAS')
-        """
-
-        tmp = np.full(len(self._collection), True, dtype=bool)
-
-        if len(kwargs) != 0:
-            for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key] == val)
-
-        for filename in self._collection[tmp]['filename']:
-            header = fits.getheader(filename)
-            yield header
+    def __getitem__(self, key):
+        return self._collection[key.upper()]
 
     def __add__(self, collection):
         if not (self._keywords == collection.keywords):
@@ -651,9 +350,6 @@ class FitsCollection(object):
                   self._keywords, self._gain, self._read_noise, self._unit)
 
         return c
-
-    def __getitem__(self, key):
-        return self._collection[key]
 
     def __call__(self, collection=None, masks=None, trim=None, **kwargs):
         """
@@ -741,6 +437,138 @@ class FitsCollection(object):
 
                 yield ccd
 
+    @property
+    def location(self):
+        return self._location
+
+    @property
+    def gain(self):
+        return self._gain
+
+    @property
+    def read_noise(self):
+        return self._read_noise
+
+    @property
+    def unit(self):
+        return self._unit
+
+    @property
+    def filenames(self):
+        return self._filenames
+
+    @property
+    def collection(self):
+        return self._collection
+
+    def _prepare(self):
+        """
+        Only for internal use.
+        """
+        self._filenames = sorted(
+            find_files(self._location, self._file_extension))
+
+        self._collection = Table()
+        self._collection.add_column(
+            Column(data=self._filenames, name='filename'))
+
+        initial_keywords = list(
+            set(key for key in fits.getheader(
+                self._filenames[0]).keys() if key))
+
+        for keyword in initial_keywords:
+            self._collection.add_column(
+                Column(data=[None] * len(self._filenames), name=keyword))
+
+        bar = Bar('Creating FitsCollection', max=len(self._filenames),
+                  fill='#', suffix='%(percent).1f%% - %(eta)ds')
+
+        for i, image in enumerate(self._collection['filename']):
+            header = fits.getheader(image)
+            keywords = list(
+                set(key for key in fits.getheader(image).keys() if key))
+
+            for keyword in keywords:
+                try:
+                    self._collection[keyword][i] = header[keyword]
+                except KeyError:
+                    self._collection.add_column(
+                        Column(data=[None] * len(self._filenames),
+                               name=keyword))
+
+                    self._collection[keyword][i] = header[keyword]
+
+            bar.next()
+
+        bar.finish()
+
+        self._keywords = self._collection.colnames
+
+    def _concat(self, collection_1, collection_2, location_1, location_2,
+                filenames_1, filenames_2, keywords_1, gain, read_noise, unit):
+        """
+        Only for internal use.
+        """
+
+        c = [collection_1, collection_2]
+        collection = vstack(c)
+
+        filenames = filenames_1 + filenames_2
+
+        self._collection = collection
+
+        self._location = [location_1, location_2]
+        self._filenames = filenames
+        self._keywords = keywords_1.copy()
+
+        self._gain = gain
+        self._read_noise = read_noise
+        self._unit = unit
+
+    def files_filtered(self, include_path=False, **kwargs):
+        """
+        Determine files whose keywords have listed values.
+
+        Parameters
+        ----------
+        include_path : bool
+            If is True, returned files include full path.
+            Default is False.
+
+        **kwargs :
+            Any additional keywords are used to filter the items returned.
+
+        Returns
+        -------
+        list of str
+            Filtered file names from collection.
+
+        Examples
+        --------
+
+        >>> from tuglib.io import FitsCollection
+        >>>
+        >>> c = FitsCollection('/home/user/data')
+        >>> files = c.files_filtered(OBJECT='BIAS')
+        """
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        for key, val in kwargs.items():
+            tmp = tmp & (self._collection[key.upper()] == val)
+
+        if np.count_nonzero(tmp) == 0:
+            return list()
+
+        files = list(self._collection[tmp]['filename'])
+
+        if include_path:
+            return files
+
+        files = [file.split(os.sep)[-1] for file in files]
+
+        return files
+
     def upload(self, hostname, username, password, remote_path, **kwargs):
         """
         Upload 'fits' file to remote computer with SFTP.
@@ -787,40 +615,196 @@ class FitsCollection(object):
         if not isinstance(remote_path, str):
             raise TypeError("'remote_path' should be a str object.")
 
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        for key, val in kwargs.items():
+            tmp = tmp & (self._collection[key.upper()] == val)
+
+        filenames = list(self._collection[tmp]['filename'])
+
+        if not filenames:
+            raise ValueError('No file found in collection!')
+
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        bar = Bar('Uploading', max=len(filenames),
+                  fill='#', suffix='%(percent).1f%% - %(eta)ds')
 
         try:
             ssh.connect(hostname=hostname, username=username,
                         password=password)
 
-            tmp = np.full(len(self._collection), True, dtype=bool)
-
-            for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key] == val)
-
-            if np.count_nonzero(tmp) == 0:
-                return list()
-
-            files_with_path = list(self._collection[tmp]['filename'])
-
-            if not files_with_path:
-                ssh.close()
-                raise ValueError('No file found in collection!')
-
-            files_without_path =\
-                [file.split(sep)[-1] for file in files_with_path]
-
             sftp = ssh.open_sftp()
 
-            for i, local_file in enumerate(files_with_path):
-                remote_file = path.join(remote_path, files_without_path[i])
+            try:
+                sftp.chdir(remote_path)
+            except IOError:
+                sftp.mkdir(remote_path)
+                sftp.chdir(remote_path)
+
+            for local_file in filenames:
+                rel_local_path = os.path.relpath(local_file, self._location)
+                remote_file = os.path.join(remote_path, rel_local_path)
+                remote_directory = os.path.split(remote_file)[0]
+
+                try:
+                    sftp.chdir(remote_directory)
+                except IOError:
+                    sftp.mkdir(remote_directory)
+                    sftp.chdir(remote_directory)
+
                 sftp.put(local_file, remote_file)
+                bar.next()
 
             sftp.close()
             ssh.close()
-
         except IOError as e:
             raise IOError(e)
 
+        bar.finish()
+
         return True
+
+    def ccds(self, masks=None, trim=None, **kwargs):
+        """
+        Generator that yields each 'ccdproc.CCDData' objects in the collection.
+
+        Parameters
+        ----------
+        masks : str, list of str or optional
+            Area to be masked.
+
+        trim : str or optional
+            Trim section.
+
+        **kwargs :
+            Any additional keywords are used to filter the items returned.
+
+        Yields
+        ------
+        'ccdproc.CCDData'
+            yield the next 'ccdproc.CCDData' in the collection.
+
+        Examples
+        --------
+
+        >>> mask = '[:, 1000:1046]'
+        >>> trim = '[100:1988, :]'
+        >>> images = FitsCollection(
+                location='/home/user/data/fits/', gain=0.57, read_noise=4.11)
+        >>> biases = images.ccds(OBJECT='BIAS', masks=mask, trim=trim)
+        """
+
+        if masks is not None:
+            if not isinstance(masks, (str, list, type(None))):
+                raise TypeError(
+                    "'masks' should be 'str', 'list' or 'None' object.")
+
+        if trim is not None:
+            if not isinstance(trim, str):
+                raise TypeError("'trim' should be a 'str' object.")
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        if len(kwargs) != 0:
+            for key, val in kwargs.items():
+                tmp = tmp & (self._collection[key.upper()] == val)
+
+        if np.count_nonzero(tmp) == 0:
+            yield None
+
+        x = self._collection[tmp]['NAXIS1'][0]
+        y = self._collection[tmp]['NAXIS2'][0]
+        shape = (y, x)
+
+        mask = None
+        if masks is not None:
+            mask = make_mask(shape, masks)
+
+        if (self._gain is not None) and (self._read_noise is not None):
+            for filename in self._collection[tmp]['filename']:
+                ccd = CCDData.read(filename, unit=self._unit,
+                                   output_verify='silentfix+ignore')
+
+                ccd.mask = mask
+                ccd = trim_image(ccd, trim)
+
+                data_with_deviation = create_deviation(
+                    ccd, gain=self._gain, readnoise=self._read_noise)
+
+                gain_corrected = gain_correct(data_with_deviation, self._gain)
+
+                yield gain_corrected
+        else:
+            for filename in self._collection[tmp]['filename']:
+                ccd = CCDData.read(filename, unit=self._unit,
+                                   output_verify='silentfix+ignore')
+
+                ccd.mask = mask
+                ccd = trim_image(ccd, trim)
+
+                yield ccd
+
+    def data(self, **kwargs):
+        """
+        Generator that yields each 'numpy.ndarray' objects in the collection.
+
+        Parameters
+        ----------
+        **kwargs :
+            Any additional keywords are used to filter the items returned
+
+        Yields
+        ------
+        'numpy.ndarray'
+            yield the next 'numpy.ndarray' in the collection.
+
+        Examples
+        --------
+
+        >>> images = FitsCollection(location='/home/user/data/fits/')
+        >>> bias_datas = images.data(OBJECT='BIAS')
+        """
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        if len(kwargs) != 0:
+            for key, val in kwargs.items():
+                tmp = tmp & (self._collection[key.upper()] == val)
+
+        for filename in self._collection[tmp]['filename']:
+            yield fits.getdata(filename)
+
+    def headers(self, **kwargs):
+        """
+        Generator that yields each 'astropy.io.fits.header.Header'
+        objects in the collection.
+
+        Parameters
+        ----------
+        **kwargs :
+            Any additional keywords are used to filter the items returned
+
+        Yields
+        ------
+        'astropy.io.fits.header.Header'
+            yield the next 'astropy.io.fits.header.Header' in the collection.
+
+        Examples
+        --------
+
+        >>> images = FitsCollection(location='/home/user/data/fits/')
+        >>> bias_headers = images.headers(OBJECT='BIAS')
+        """
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        if len(kwargs) != 0:
+            for key, val in kwargs.items():
+                tmp = tmp & (self._collection[key.upper()] == val)
+
+        for filename in self._collection[tmp]['filename']:
+            header = fits.getheader(filename)
+            yield header
+
