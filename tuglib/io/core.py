@@ -6,7 +6,8 @@ __all__ = ['FitsCollection', 'convert_to_ccddata', 'convert_to_fits']
 import types
 import os
 from glob import glob
-from progress.bar import Bar
+# from progress.bar import Bar
+from progressbar import ProgressBar
 
 import paramiko
 
@@ -190,42 +191,6 @@ def convert_to_fits(images, filenames, location=None,
             ccd.write(output, overwrite=True, output_verify='silentfix+ignore')
 
 
-# Helper method for FitsCollection class.
-def get_fits_header(filename):
-    """
-    Converts 'Header' to list of 'keywords', 'values', 'comments' and 'dtypes'.
-
-    Parameters
-    ----------
-    filename : str
-        Fits file to be trasposed.
-
-    Returns
-    -------
-    result : list of list
-        [keywords, values, comments, dtypes]
-    """
-
-    h = fits.getheader(filename)
-
-    keywords = list(h.keys())
-    values = list(h.values())
-    comments = list(h.comments)
-
-    dtypes = list()
-    for x in values:
-        if isinstance(x, bool):
-            dtypes.append('bool')
-        elif isinstance(x, int):
-            dtypes.append('int')
-        elif isinstance(x, float):
-            dtypes.append('float')
-        else:
-            dtypes.append('U64')
-
-    return keywords, values, comments, dtypes
-
-
 class FitsCollection(object):
     """
     FITS Image Collection
@@ -269,6 +234,9 @@ class FitsCollection(object):
     upload(hostname, username, password, remote_path, **kwargs)
         Upload 'fits' file to remote computer with SFTP.
 
+    stats(include_path=False, **kwargs)
+        Creates basic statistical information of the collection.
+
     Examples
     --------
 
@@ -301,6 +269,28 @@ class FitsCollection(object):
     def __init__(self, location, file_extension='', masks=None,
                  unit=u.adu, gain=None, read_noise=None):
 
+        if not isinstance(location, str):
+            raise TypeError(
+                "'location' should be a 'str' object.")
+
+        if not isinstance(file_extension, (str, tuple, list)):
+            raise TypeError(
+                "'file_extension' should be "
+                "'None', 'str', 'tuple' or 'list' object.")
+
+        if file_extension not in FILE_EXTENSIONS:
+            raise ValueError(
+                "'file_extension' should be "
+                "'fit, fits, fit.gz, fits.gz, fit.zip, fits.zip' type.")
+
+        if not isinstance(gain, (type(None), float)):
+            raise TypeError(
+                "'gain' should be 'None' or 'float' object.")
+
+        if not isinstance(read_noise, (type(None), float)):
+            raise TypeError(
+                "'read_noise' should be 'None' or 'float' object.")
+
         self._location = location
         self._file_extension = file_extension
         self._masks = masks
@@ -323,7 +313,25 @@ class FitsCollection(object):
             self._prepare()
 
     def __getitem__(self, key):
-        return self._collection[key.upper()]
+        print(type(key))
+        if isinstance(key, np.ndarray):
+            return self._collection[key]
+
+        if isinstance(key, str):
+            if key != 'filename':
+                key = key.upper()
+
+        if isinstance(key, tuple):
+            keys = list()
+            for item in key:
+                if item != 'filename':
+                    keys.append(item.upper())
+                else:
+                    keys.append(item)
+
+            key = keys
+
+        return self._collection[key]
 
     def __add__(self, collection):
         if not (self._keywords == collection.keywords):
@@ -437,6 +445,27 @@ class FitsCollection(object):
 
                 yield ccd
 
+    def __repr__(self):
+        keywords = sorted(self._collection.colnames)
+        number_of_keywords = len(keywords)
+
+        number_of_filenames = len(self._filenames)
+
+        objects = list(set(self._collection['OBJECT']))
+        number_of_objects = len(objects)
+
+        message = f"Image path: {self._location}\n" \
+                  f"{number_of_filenames} images were found.\n\n" \
+                  f"Keywords ({number_of_keywords} found):\n" \
+                  f"{keywords}\n\n" \
+                  f"OBJECT ({number_of_objects} found):\n" \
+                  f"{objects}"
+
+        return message
+
+    def __str__(self):
+        return 'FITS Image Collection'
+
     @property
     def location(self):
         return self._location
@@ -465,6 +494,9 @@ class FitsCollection(object):
         """
         Only for internal use.
         """
+        if not self._location:
+            return
+
         self._filenames = sorted(
             find_files(self._location, self._file_extension))
 
@@ -480,8 +512,9 @@ class FitsCollection(object):
             self._collection.add_column(
                 Column(data=[None] * len(self._filenames), name=keyword))
 
-        bar = Bar('Creating FitsCollection', max=len(self._filenames),
-                  fill='#', suffix='%(percent).1f%% - %(eta)ds')
+        # bar = Bar('Creating FitsCollection', max=len(self._filenames),
+        #           fill='#', suffix='%(percent).1f%% - %(eta)ds')
+        bar = ProgressBar(max_value=len(self._filenames))
 
         for i, image in enumerate(self._collection['filename']):
             header = fits.getheader(image)
@@ -498,7 +531,8 @@ class FitsCollection(object):
 
                     self._collection[keyword][i] = header[keyword]
 
-            bar.next()
+            # bar.next()
+            bar.update(i)
 
         bar.finish()
 
@@ -628,8 +662,9 @@ class FitsCollection(object):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        bar = Bar('Uploading', max=len(filenames),
-                  fill='#', suffix='%(percent).1f%% - %(eta)ds')
+        # bar = Bar('Uploading', max=len(filenames),
+        #           fill='#', suffix='%(percent).1f%% - %(eta)ds')
+        bar = ProgressBar(max_value=len(filenames))
 
         try:
             ssh.connect(hostname=hostname, username=username,
@@ -643,7 +678,7 @@ class FitsCollection(object):
                 sftp.mkdir(remote_path)
                 sftp.chdir(remote_path)
 
-            for local_file in filenames:
+            for i, local_file in enumerate(filenames):
                 rel_local_path = os.path.relpath(local_file, self._location)
                 remote_file = os.path.join(remote_path, rel_local_path)
                 remote_directory = os.path.split(remote_file)[0]
@@ -655,7 +690,8 @@ class FitsCollection(object):
                     sftp.chdir(remote_directory)
 
                 sftp.put(local_file, remote_file)
-                bar.next()
+                # bar.next()
+                bar.update(i)
 
             sftp.close()
             ssh.close()
@@ -808,3 +844,86 @@ class FitsCollection(object):
             header = fits.getheader(filename)
             yield header
 
+    def stats(self, include_path=False, **kwargs):
+        """
+        Creates basic statistical information of the collection.
+
+        Parameters
+        ----------
+        include_path : bool
+            Default value is False.
+
+        **kwargs :
+            Any additional keywords are used to filter the items returned
+
+        Return
+        ------
+        'astropy.table.Table'
+            Statistical table
+
+        Examples
+        --------
+
+        >>> images = FitsCollection(location='/home/user/data/fits/')
+        >>> stat = images.stats(OBJECT='BIAS')
+        >>> print(stat)
+        filename  min    max      mean   median  std     rms
+        -------- ----- -------- ------- ------- ------ -------
+        bias0001 0.000 2708.000 401.755 400.000 17.024 171.390
+        bias0002 0.000 1728.000 398.765 399.000 10.716 167.850
+        bias0003 0.000 6627.000 400.096 400.000 11.442 170.973
+        bias0004 0.000 5826.000 401.051 401.000 11.348 173.213
+        bias0005 0.000 2727.000 401.793 402.000 11.702 174.843
+        bias0006 0.000 7634.000 401.558 402.000 11.525 174.370
+        bias0007 0.000 3111.000 401.494 402.000 11.929 174.137
+        bias0008 0.000 6431.000 401.608 402.000 11.761 174.480
+        bias0009 0.000 2658.000 401.361 402.000 10.834 173.927
+        bias0010 0.000 3767.000 400.977 401.000 11.020 173.037
+        """
+
+        filenames = list()
+        mins = list()
+        maxs = list()
+        means = list()
+        medians = list()
+        stds = list()
+        rmss = list()
+
+        stat = Table()
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        if len(kwargs) != 0:
+            for key, val in kwargs.items():
+                tmp = tmp & (self._collection[key.upper()] == val)
+
+        for filename in self._collection[tmp]['filename']:
+            data = fits.getdata(filename)
+
+            if not include_path:
+                filename = os.path.split(filename)[1]
+
+            filenames.append(filename)
+            mins.append(data.min())
+            maxs.append(data.max())
+            means.append(data.mean())
+            medians.append(np.median(data))
+            stds.append(data.std())
+            rmss.append(np.sqrt(np.mean(np.square(data.flatten()))))
+
+        stat.add_column(Column(data=filenames, name='filename'))
+        stat.add_column(Column(data=mins, name='min'))
+        stat.add_column(Column(data=maxs, name='max'))
+        stat.add_column(Column(data=means, name='mean'))
+        stat.add_column(Column(data=medians, name='median'))
+        stat.add_column(Column(data=stds, name='std'))
+        stat.add_column(Column(data=rmss, name='rms'))
+
+        stat['min'].info.format = '.3f'
+        stat['max'].info.format = '.3f'
+        stat['mean'].info.format = '.3f'
+        stat['median'].info.format = '.3f'
+        stat['std'].info.format = '.3f'
+        stat['rms'].info.format = '.3f'
+
+        return stat
