@@ -6,7 +6,8 @@ __all__ = ['FitsCollection', 'convert_to_ccddata', 'convert_to_fits']
 import types
 import os
 from glob import glob
-# from progress.bar import Bar
+import fnmatch
+from datetime import datetime
 from progressbar import ProgressBar
 
 import paramiko
@@ -217,6 +218,10 @@ class FitsCollection(object):
     unit : astropy.units
         'Unit' value. Default type is 'astropy.units.adu'.
 
+    disregard_nan: bool
+        If True, any value of nan in the output array will be replaced by
+        the readnoise.
+
     Methods
     -------
     ccds(**kwargs)
@@ -239,7 +244,8 @@ class FitsCollection(object):
 
     Examples
     --------
-
+    >>> from tuglib.io import FitsCollection
+    >>>
     >>> # Get all fits file from directory.
     >>> images = FitsCollection(
             location='/Users/oguzhan/tmp/20180901N/',
@@ -266,8 +272,8 @@ class FitsCollection(object):
     /Users/oguzhan/tmp/20180901N/BDF/FLAT_0019_V.fits    0.05
     """
 
-    def __init__(self, location, file_extension='', masks=None,
-                 unit=u.adu, gain=None, read_noise=None):
+    def __init__(self, location, file_extension='', masks=None, unit=u.adu,
+                 gain=None, read_noise=None, disregard_nan=False):
 
         if not isinstance(location, str):
             raise TypeError(
@@ -304,16 +310,17 @@ class FitsCollection(object):
             self._read_noise = read_noise * u.electron
 
         self._unit = unit
+        self._disregard_nan = disregard_nan
 
         self._filenames = list()
+        self._filenames_without_path = list()
         self._keywords = None
         self._collection = None
 
         if self._location:
-            self._prepare()
+            self.update()
 
     def __getitem__(self, key):
-        print(type(key))
         if isinstance(key, np.ndarray):
             return self._collection[key]
 
@@ -384,7 +391,8 @@ class FitsCollection(object):
 
         Examples
         --------
-
+        >>> from tuglib.io import FitsCollection
+        >>>
         >>> mask = '[:, 1000:1046]'
         >>> trim = '[100:1988, :]'
         >>>
@@ -431,7 +439,8 @@ class FitsCollection(object):
                 ccd = trim_image(ccd, trim)
 
                 data_with_deviation = create_deviation(
-                    ccd, gain=self._gain, readnoise=self._read_noise)
+                    ccd, gain=self._gain, readnoise=self._read_noise,
+                    disregard_nan=self._disregard_nan)
 
                 gain_corrected = gain_correct(data_with_deviation, self._gain)
 
@@ -444,6 +453,12 @@ class FitsCollection(object):
                 ccd = trim_image(ccd, trim)
 
                 yield ccd
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
     def __repr__(self):
         keywords = sorted(self._collection.colnames)
@@ -490,15 +505,22 @@ class FitsCollection(object):
     def collection(self):
         return self._collection
 
-    def _prepare(self):
+    def update(self):
         """
-        Only for internal use.
+        Updates collections.
         """
+
         if not self._location:
             return
 
         self._filenames = sorted(
             find_files(self._location, self._file_extension))
+
+        if not self._filenames:
+            raise ValueError(f"No images found in '{self._location}'")
+
+        self._filenames_without_path = \
+            [os.path.split(filename)[1] for filename in self._filenames]
 
         self._collection = Table()
         self._collection.add_column(
@@ -512,8 +534,6 @@ class FitsCollection(object):
             self._collection.add_column(
                 Column(data=[None] * len(self._filenames), name=keyword))
 
-        # bar = Bar('Creating FitsCollection', max=len(self._filenames),
-        #           fill='#', suffix='%(percent).1f%% - %(eta)ds')
         bar = ProgressBar(max_value=len(self._filenames))
 
         for i, image in enumerate(self._collection['filename']):
@@ -522,16 +542,17 @@ class FitsCollection(object):
                 set(key for key in fits.getheader(image).keys() if key))
 
             for keyword in keywords:
-                try:
-                    self._collection[keyword][i] = header[keyword]
-                except KeyError:
+                value = header[keyword]
+                if isinstance(value, str):
+                    value = value.strip()
+
+                if keyword not in self._collection.colnames:
                     self._collection.add_column(
                         Column(data=[None] * len(self._filenames),
                                name=keyword))
 
-                    self._collection[keyword][i] = header[keyword]
+                self._collection[keyword][i] = value
 
-            # bar.next()
             bar.update(i)
 
         bar.finish()
@@ -589,7 +610,14 @@ class FitsCollection(object):
         tmp = np.full(len(self._collection), True, dtype=bool)
 
         for key, val in kwargs.items():
-            tmp = tmp & (self._collection[key.upper()] == val)
+            if key == 'filename':
+                file_mask = np.array(
+                    [fnmatch.fnmatch(filename, kwargs['filename'])
+                     for filename in self._filenames_without_path], dtype=bool)
+
+                tmp = tmp & file_mask
+            else:
+                tmp = tmp & (self._collection[key.upper()] == val)
 
         if np.count_nonzero(tmp) == 0:
             return list()
@@ -652,7 +680,14 @@ class FitsCollection(object):
         tmp = np.full(len(self._collection), True, dtype=bool)
 
         for key, val in kwargs.items():
-            tmp = tmp & (self._collection[key.upper()] == val)
+            if key == 'filename':
+                file_mask = np.array(
+                    [fnmatch.fnmatch(filename, kwargs['filename'])
+                     for filename in self._filenames_without_path], dtype=bool)
+
+                tmp = tmp & file_mask
+            else:
+                tmp = tmp & (self._collection[key.upper()] == val)
 
         filenames = list(self._collection[tmp]['filename'])
 
@@ -662,8 +697,6 @@ class FitsCollection(object):
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        # bar = Bar('Uploading', max=len(filenames),
-        #           fill='#', suffix='%(percent).1f%% - %(eta)ds')
         bar = ProgressBar(max_value=len(filenames))
 
         try:
@@ -690,7 +723,6 @@ class FitsCollection(object):
                     sftp.chdir(remote_directory)
 
                 sftp.put(local_file, remote_file)
-                # bar.next()
                 bar.update(i)
 
             sftp.close()
@@ -724,7 +756,8 @@ class FitsCollection(object):
 
         Examples
         --------
-
+        >>> from tuglib.io import FitsCollection
+        >>>
         >>> mask = '[:, 1000:1046]'
         >>> trim = '[100:1988, :]'
         >>> images = FitsCollection(
@@ -745,7 +778,15 @@ class FitsCollection(object):
 
         if len(kwargs) != 0:
             for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key.upper()] == val)
+                if key == 'filename':
+                    file_mask = np.array(
+                        [fnmatch.fnmatch(filename, kwargs['filename'])
+                         for filename in self._filenames_without_path],
+                        dtype=bool)
+
+                    tmp = tmp & file_mask
+                else:
+                    tmp = tmp & (self._collection[key.upper()] == val)
 
         if np.count_nonzero(tmp) == 0:
             yield None
@@ -758,28 +799,22 @@ class FitsCollection(object):
         if masks is not None:
             mask = make_mask(shape, masks)
 
-        if (self._gain is not None) and (self._read_noise is not None):
-            for filename in self._collection[tmp]['filename']:
-                ccd = CCDData.read(filename, unit=self._unit,
-                                   output_verify='silentfix+ignore')
+        for filename in self._collection[tmp]['filename']:
+            ccd = CCDData.read(filename, unit=self._unit,
+                               output_verify='silentfix+ignore')
 
-                ccd.mask = mask
-                ccd = trim_image(ccd, trim)
+            ccd.mask = mask
+            ccd = trim_image(ccd, trim)
 
+            if (self._gain is not None) and (self._read_noise is not None):
                 data_with_deviation = create_deviation(
-                    ccd, gain=self._gain, readnoise=self._read_noise)
+                    ccd, gain=self._gain, readnoise=self._read_noise,
+                    disregard_nan=self._disregard_nan)
 
                 gain_corrected = gain_correct(data_with_deviation, self._gain)
 
                 yield gain_corrected
-        else:
-            for filename in self._collection[tmp]['filename']:
-                ccd = CCDData.read(filename, unit=self._unit,
-                                   output_verify='silentfix+ignore')
-
-                ccd.mask = mask
-                ccd = trim_image(ccd, trim)
-
+            else:
                 yield ccd
 
     def data(self, **kwargs):
@@ -799,6 +834,8 @@ class FitsCollection(object):
         Examples
         --------
 
+        >>> from tuglib.io import FitsCollection
+        >>>
         >>> images = FitsCollection(location='/home/user/data/fits/')
         >>> bias_datas = images.data(OBJECT='BIAS')
         """
@@ -807,7 +844,15 @@ class FitsCollection(object):
 
         if len(kwargs) != 0:
             for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key.upper()] == val)
+                if key == 'filename':
+                    file_mask = np.array(
+                        [fnmatch.fnmatch(filename, kwargs['filename'])
+                         for filename in self._filenames_without_path],
+                        dtype=bool)
+
+                    tmp = tmp & file_mask
+                else:
+                    tmp = tmp & (self._collection[key.upper()] == val)
 
         for filename in self._collection[tmp]['filename']:
             yield fits.getdata(filename)
@@ -829,7 +874,8 @@ class FitsCollection(object):
 
         Examples
         --------
-
+        >>> from tuglib.io import FitsCollection
+        >>>
         >>> images = FitsCollection(location='/home/user/data/fits/')
         >>> bias_headers = images.headers(OBJECT='BIAS')
         """
@@ -838,7 +884,15 @@ class FitsCollection(object):
 
         if len(kwargs) != 0:
             for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key.upper()] == val)
+                if key == 'filename':
+                    file_mask = np.array(
+                        [fnmatch.fnmatch(filename, kwargs['filename'])
+                         for filename in self._filenames_without_path],
+                        dtype=bool)
+
+                    tmp = tmp & file_mask
+                else:
+                    tmp = tmp & (self._collection[key.upper()] == val)
 
         for filename in self._collection[tmp]['filename']:
             header = fits.getheader(filename)
@@ -863,7 +917,8 @@ class FitsCollection(object):
 
         Examples
         --------
-
+        >>> from tuglib.io import FitsCollection
+        >>>
         >>> images = FitsCollection(location='/home/user/data/fits/')
         >>> stat = images.stats(OBJECT='BIAS')
         >>> print(stat)
@@ -895,7 +950,15 @@ class FitsCollection(object):
 
         if len(kwargs) != 0:
             for key, val in kwargs.items():
-                tmp = tmp & (self._collection[key.upper()] == val)
+                if key == 'filename':
+                    file_mask = np.array(
+                        [fnmatch.fnmatch(filename, kwargs['filename'])
+                         for filename in self._filenames_without_path],
+                        dtype=bool)
+
+                    tmp = tmp & file_mask
+                else:
+                    tmp = tmp & (self._collection[key.upper()] == val)
 
         for filename in self._collection[tmp]['filename']:
             data = fits.getdata(filename)
@@ -927,3 +990,119 @@ class FitsCollection(object):
         stat['rms'].info.format = '.3f'
 
         return stat
+
+    def unique(self, keyword):
+        """
+        Finds each unique item in keyword.
+
+        Parameters
+        ----------
+
+        keyword : str, list or tuple
+            The server to connect to.
+
+        Returns
+        -------
+        list or dict
+            Founded unique items.
+
+        Examples
+        --------
+        >>> from tuglib.io import FitsCollection
+        >>>
+        >>> images = FitsCollection(location='/home/user/data/fits/')
+        >>> print(images.unique('OBJECT'))
+        ['Bias', 'Dark', 'Flat', 'Vega']
+        """
+
+        if keyword != 'filename':
+            keyword = keyword.upper()
+
+        return sorted(list(set(self._collection[keyword])))
+
+    def filter_by_date(self, return_mask=True,
+                       date_format='%Y-%m-%dT%H:%M:%S',
+                       date_keyword='DATE-OBS', **kwargs):
+        """
+        Filter collection by date.
+
+        Parameters
+        ----------
+        return_mask : bool
+            If True returns masked array
+
+        date_format : str
+            'datetime.datetime' format
+
+        date_keyword : str
+            Date keyword to filter. It should be in collection.
+
+        **kwargs :
+                Any additional keywords are used to filter the items returned
+
+        Returns
+        -------
+        'np.array' or 'astropy.table.Table'
+            Filtered collection
+
+        Examples
+        --------
+        >>> from tuglib.io import FitsCollection
+        >>>
+        >>> images = FitsCollection(location='/home/user/data/fits')
+        >>> m = images.filter_by_date(gt='2013-01-10T15:33:00',
+                                      lt='2013-01-10T16:22:00')
+        >>> print(m)
+        array([False, False, False, False, False, False,  True,  True,  True,
+                True,  True, False, False, False, False, False, False, False,
+               False, False, False, False, False, False, False, False, False,
+               False, False]
+        """
+
+        if date_keyword not in self._keywords:
+            raise ValueError("'date_keyword' error!")
+
+        for key, val in kwargs.items():
+            if key not in ['lt', 'gt', 'le', 'ge']:
+                raise IOError("It should be used with at least one of the "
+                              "'lt', 'gt', 'le' and 'ge' arguments!")
+
+        tmp = np.full(len(self._collection), True, dtype=bool)
+
+        dates = [datetime.strptime(date, date_format)
+                 for date in self._collection[date_keyword]]
+        t_dates = Column(data=dates, name='dates')
+
+        for key, val in kwargs.items():
+            val = datetime.strptime(val, date_format)
+
+            if key == 'lt':
+                tmp = tmp & (t_dates < val)
+                continue
+
+            if key == 'gt':
+                tmp = tmp & (t_dates > val)
+                continue
+
+            if key == 'le':
+                tmp = tmp & (t_dates <= val)
+                continue
+
+            if key == 'ge':
+                tmp = tmp & (t_dates >= val)
+                continue
+
+            if key.upper() in self._keywords:
+                if key == 'filename':
+                    file_mask = np.array(
+                        [fnmatch.fnmatch(filename, kwargs['filename'])
+                         for filename in self._filenames_without_path], dtype=bool)
+
+                    tmp = tmp & file_mask
+                else:
+                    tmp = tmp & (self._collection[key.upper()] == val)
+
+        if return_mask:
+            return tmp
+
+        return self._collection[tmp]
